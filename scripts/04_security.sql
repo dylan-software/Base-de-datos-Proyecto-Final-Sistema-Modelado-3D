@@ -26,3 +26,13 @@ INSERT INTO roles (nombre, descripcion)
 VALUES
   ('estudiante',    'Crea y edita sus propias habitaciones'),
   ('administrador', 'Gestiona usuarios y consulta toda la auditoria');
+
+-- Relacion muchos a muchos: un usuario puede tener varios roles y un rol
+-- pertenece a muchos usuarios. La llave primaria compuesta impide
+-- asignar dos veces el mismo rol.
+CREATE TABLE usuario_roles (
+  usuario_id   INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  rol_id       INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+  asignado_en  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (usuario_id, rol_id)
+);
