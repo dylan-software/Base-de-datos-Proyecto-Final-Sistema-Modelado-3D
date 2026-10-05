@@ -29,3 +29,11 @@ CREATE TABLE muebles_sugeridos (
 ALTER TABLE muebles_sugeridos
   ADD CONSTRAINT fk_muebles_habitacion
   FOREIGN KEY (habitacion_id) REFERENCES habitaciones(id) ON DELETE CASCADE;
+
+-- Historial de recomendaciones esteticas devueltas por la API de OmniRoute.
+CREATE TABLE historial_ia (
+  id             SERIAL PRIMARY KEY,
+  habitacion_id  INTEGER NOT NULL REFERENCES habitaciones(id) ON DELETE CASCADE,
+  recomendacion  TEXT NOT NULL,
+  creado_en      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
