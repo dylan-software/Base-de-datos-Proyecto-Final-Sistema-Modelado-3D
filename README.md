@@ -79,3 +79,38 @@ historial de recomendaciones esteticas que devuelve la API de OmniRoute.
   (`fk_muebles_habitacion`). Las coordenadas son metros relativos a la esquina origen de la habitacion.
 - Una habitacion tiene **muchas** recomendaciones de OmniRoute en `historial_ia`.
 - Ambas llaves foraneas usan `ON DELETE CASCADE`: al borrar una habitacion se borran sus muebles e historial.
+
+## Despliegue y ejecucion de los scripts
+
+Requisitos: PostgreSQL 14+ con el cliente `psql` en el `PATH`. El servidor escucha por defecto en el
+puerto **5432**; si tu instalacion usa otro (por ejemplo 5433 cuando hay dos versiones instaladas),
+cambia `-p` en los comandos o define la variable `PGPORT`.
+
+```bash
+# Conexion (ajusta a tu instalacion)
+export PGHOST=localhost
+export PGPORT=5432
+export PGUSER=postgres
+
+# 1) Crear la base y las tablas. Se ejecuta contra la base "postgres",
+#    porque 01_schema.sql crea modelado_3d y luego se conecta con \c.
+psql -d postgres -f scripts/01_schema.sql
+
+# 2) Indices y 3) datos semilla, directamente sobre modelado_3d
+psql -d modelado_3d -f scripts/02_indexes.sql
+psql -d modelado_3d -f scripts/03_seed.sql
+```
+
+En PowerShell usa `$env:PGPORT = "5432"` en lugar de `export`.
+
+Comprobacion rapida (espera 1 habitacion y 2 muebles):
+
+```sql
+SELECT h.nombre, m.nombre, m.posicion_x, m.posicion_y, m.posicion_z
+FROM habitaciones h JOIN muebles_sugeridos m ON m.habitacion_id = h.id;
+```
+
+Para empezar de cero: `psql -d postgres -c "DROP DATABASE IF EXISTS modelado_3d;"`.
+
+> Estos scripts son para PostgreSQL local. `CREATE DATABASE` y `\c` no funcionan en el SQL Editor de
+> Supabase; para Supabase usa `schema.sql` como se describe arriba.
