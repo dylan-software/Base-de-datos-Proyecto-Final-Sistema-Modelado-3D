@@ -14,3 +14,15 @@ CREATE TABLE usuarios (
   activo          BOOLEAN NOT NULL DEFAULT true,
   creado_en       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Niveles de acceso. El catalogo es fijo y se carga aqui mismo.
+CREATE TABLE roles (
+  id           SERIAL PRIMARY KEY,
+  nombre       VARCHAR(30) NOT NULL UNIQUE,
+  descripcion  TEXT
+);
+
+INSERT INTO roles (nombre, descripcion)
+VALUES
+  ('estudiante',    'Crea y edita sus propias habitaciones'),
+  ('administrador', 'Gestiona usuarios y consulta toda la auditoria');
