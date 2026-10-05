@@ -25,3 +25,7 @@ CREATE TABLE muebles_sugeridos (
   posicion_z     FLOAT NOT NULL,
   creado_en      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE muebles_sugeridos
+  ADD CONSTRAINT fk_muebles_habitacion
+  FOREIGN KEY (habitacion_id) REFERENCES habitaciones(id) ON DELETE CASCADE;
