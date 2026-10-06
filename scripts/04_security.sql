@@ -36,3 +36,24 @@ CREATE TABLE usuario_roles (
   asignado_en  TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (usuario_id, rol_id)
 );
+
+-- Cada habitacion pasa a tener un dueno obligatorio. Las habitaciones que
+-- ya existen (por ejemplo las de 03_seed.sql) se asignan a la cuenta
+-- "sistema", cuyo hash '!' nunca coincide con una firma bcrypt, asi que
+-- no puede iniciar sesion. Solo despues del relleno se exige NOT NULL.
+INSERT INTO usuarios (nombre_usuario, email, password_hash)
+VALUES ('sistema', 'sistema@modelado3d.local', '!');
+
+ALTER TABLE habitaciones ADD COLUMN usuario_id INTEGER;
+
+UPDATE habitaciones
+SET usuario_id = (SELECT id FROM usuarios WHERE nombre_usuario = 'sistema')
+WHERE usuario_id IS NULL;
+
+ALTER TABLE habitaciones
+  ALTER COLUMN usuario_id SET NOT NULL,
+  ADD CONSTRAINT fk_habitaciones_usuario
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE;
+
+CREATE INDEX idx_habitaciones_usuario
+  ON habitaciones (usuario_id);
