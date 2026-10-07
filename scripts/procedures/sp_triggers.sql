@@ -1,8 +1,6 @@
 -- Disparadores automaticos del servidor. Ejecutar despues de
 -- sp_security.sql (requiere la tabla auditoria_muebles).
 
--- TODO: funciones de trigger.
-
 -- Funcion de trigger: detecta si un mueble cambio de coordenadas.
 -- IS DISTINCT FROM compara sin falsos negativos y ROW(...) evalua el
 -- vector (x, y, z) completo de una vez.

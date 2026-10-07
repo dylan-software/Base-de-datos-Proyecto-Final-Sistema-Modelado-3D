@@ -3,8 +3,6 @@
 -- bcrypt y digest() para el hash SHA-256 de los tokens.
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- TODO: funciones de sesion.
-
 -- Devuelve el id del usuario dueno del token si la sesion sigue vigente
 -- (no expirada, no revocada y con la cuenta activa); NULL en otro caso.
 CREATE OR REPLACE FUNCTION fn_validar_sesion(p_token TEXT)

@@ -1,8 +1,6 @@
 -- Seguridad y control de accesos. Ejecutar despues de 03_seed.sql.
 -- Modela usuarios, roles y la relacion de cada habitacion con su dueno.
 
--- TODO: definiciones de tablas de seguridad.
-
 -- Cuentas de acceso a la aplicacion web. La contrasena nunca se guarda en
 -- claro: password_hash contiene la firma bcrypt generada con
 -- crypt(<clave>, gen_salt('bf')) de pgcrypto.

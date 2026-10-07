@@ -1,8 +1,6 @@
 -- Auditoria de la interfaz web. Ejecutar despues de 04_security.sql.
 -- Guarda la actividad de las sesiones y el historial de posiciones 3D.
 
--- TODO: tablas de auditoria.
-
 -- Bitacora general: inicios/cierres de sesion y peticiones asincronas que
 -- el navegador hace a la API de Python. usuario_id es opcional porque un
 -- login fallido puede no corresponder a ningun usuario existente.
