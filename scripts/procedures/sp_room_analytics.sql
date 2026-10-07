@@ -1,0 +1,3 @@
+-- Metricas de ocupacion volumetrica de cada habitacion. Ejecutar despues
+-- de 07_spatial_constraints.sql (usa las medidas ancho/alto/profundidad de
+-- muebles_sugeridos). Todos los volumenes se expresan en metros cubicos.
