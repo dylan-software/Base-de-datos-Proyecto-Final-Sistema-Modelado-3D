@@ -39,10 +39,13 @@ CREATE TABLE usuario_roles (
 
 -- Cada habitacion pasa a tener un dueno obligatorio. Las habitaciones que
 -- ya existen (por ejemplo las de 03_seed.sql) se asignan a la cuenta
--- "sistema", cuyo hash '!' nunca coincide con una firma bcrypt, asi que
--- no puede iniciar sesion. Solo despues del relleno se exige NOT NULL.
-INSERT INTO usuarios (nombre_usuario, email, password_hash)
-VALUES ('sistema', 'sistema@modelado3d.local', '!');
+-- "sistema", que esta inactiva y cuyo hash es la firma bcrypt de un
+-- secreto aleatorio descartado: no puede iniciar sesion. (Un hash que no
+-- sea bcrypt, como '!', haria fallar crypt() con "invalid salt".)
+-- Solo despues del relleno se exige NOT NULL.
+INSERT INTO usuarios (nombre_usuario, email, password_hash, activo)
+VALUES ('sistema', 'sistema@modelado3d.local',
+        '$2a$10$EE9du9RvnKHXHEAghkxGGeH5zyKqwsCqq0IbZ18DA6n/cq.3LSqvS', false);
 
 ALTER TABLE habitaciones ADD COLUMN usuario_id INTEGER;
 
