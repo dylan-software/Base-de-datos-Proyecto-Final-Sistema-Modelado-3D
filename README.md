@@ -48,6 +48,11 @@ historial de recomendaciones esteticas que devuelve la API de OmniRoute.
 | `scripts/01_schema.sql` | Crea la base `modelado_3d` y las tablas `habitaciones`, `muebles_sugeridos`, `historial_ia` |
 | `scripts/02_indexes.sql` | Indice sobre la llave foranea `muebles_sugeridos.habitacion_id` |
 | `scripts/03_seed.sql` | Habitacion vacia de 4x4 m con un sofa y un escritorio de prueba |
+| `scripts/04_security.sql` | Tablas `usuarios`, `roles`, `usuario_roles`, `sesiones` y la llave foranea `habitaciones.usuario_id` |
+| `scripts/05_audit_logs.sql` | Tablas `logs_actividad` y `auditoria_muebles` |
+| `scripts/procedures/sp_security.sql` | Extension `pgcrypto` y la funcion `fn_validar_sesion` |
+| `scripts/procedures/sp_triggers.sql` | Funcion `fn_log_mueble_movement` y trigger `trg_audit_muebles_cambios` |
+| `scripts/06_advanced_queries.sql` | Funcion `fn_distancia_euclidiana` para calculos espaciales |
 
 ## Diagrama entidad-relacion
 
@@ -79,6 +84,53 @@ historial de recomendaciones esteticas que devuelve la API de OmniRoute.
   (`fk_muebles_habitacion`). Las coordenadas son metros relativos a la esquina origen de la habitacion.
 - Una habitacion tiene **muchas** recomendaciones de OmniRoute en `historial_ia`.
 - Ambas llaves foraneas usan `ON DELETE CASCADE`: al borrar una habitacion se borran sus muebles e historial.
+
+## Modelo de seguridad y roles
+
+```
++---------------------------+       +-----------------------------+       +------------------------+
+|         usuarios          |       |        usuario_roles        |       |         roles          |
++---------------------------+       +-----------------------------+       +------------------------+
+| PK id            SERIAL   |1     N| PK,FK usuario_id INTEGER    |N     1| PK id         SERIAL   |
+|    nombre_usuario VARCHAR |-------| PK,FK rol_id     INTEGER    |-------|    nombre     VARCHAR  |
+|    email         VARCHAR  |       |    asignado_en TIMESTAMPTZ  |       |    descripcion TEXT    |
+|    password_hash TEXT     |       +-----------------------------+       +------------------------+
+|    activo        BOOLEAN  |
+|    creado_en     TIMESTAMPTZ
++---------------------------+
+      |1                |1
+      |N                |N
++--------------+   +---------------------------+
+| habitaciones |   |         sesiones          |
+| FK usuario_id|   | FK usuario_id  INTEGER    |
++--------------+   |    token_hash  CHAR(64)   |
+                   |    expira_en   TIMESTAMPTZ|
+                   |    revocada    BOOLEAN    |
+                   +---------------------------+
+```
+
+- **Contrasenas:** `password_hash` guarda una firma bcrypt generada con `crypt(clave, gen_salt('bf'))` de
+  `pgcrypto`. Para validar un login: `password_hash = crypt(clave_ingresada, password_hash)`.
+- **Roles:** `roles` se carga con `estudiante` y `administrador`. `usuario_roles` es la tabla puente
+  muchos a muchos; su llave primaria compuesta evita asignar dos veces el mismo rol.
+- **Dueno de cada habitacion:** `04_security.sql` agrega `habitaciones.usuario_id` como llave foranea
+  `NOT NULL`. Las habitaciones que ya existian se asignan a la cuenta `sistema`, cuyo hash `!` no coincide
+  con ninguna firma bcrypt, por lo que no puede iniciar sesion.
+- **Sesiones:** el navegador recibe un token; la base solo guarda su SHA-256 (`token_hash`).
+  `fn_validar_sesion(token)` devuelve el `usuario_id` si la sesion no esta expirada ni revocada y la cuenta
+  esta activa, o `NULL` en caso contrario.
+
+Ejecucion de los scripts nuevos, en este orden y despues de `03_seed.sql`:
+
+```bash
+psql -d modelado_3d -f scripts/04_security.sql
+psql -d modelado_3d -f scripts/05_audit_logs.sql
+psql -d modelado_3d -f scripts/procedures/sp_security.sql
+psql -d modelado_3d -f scripts/procedures/sp_triggers.sql
+psql -d modelado_3d -f scripts/06_advanced_queries.sql
+```
+
+`CREATE EXTENSION pgcrypto` requiere un usuario con permiso para crear extensiones (por ejemplo `postgres`).
 
 ## Despliegue y ejecucion de los scripts
 
