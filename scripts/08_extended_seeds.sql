@@ -44,3 +44,41 @@ VALUES
   (currval('habitaciones_id_seq'), 'Mesa de noche izq.',  0.985, 0.0, 0.200, 0.50, 0.55, 0.40),
   (currval('habitaciones_id_seq'), 'Mesa de noche der.',  3.515, 0.0, 0.200, 0.50, 0.55, 0.40),
   (currval('habitaciones_id_seq'), 'Armario empotrado',   1.200, 0.0, 3.700, 2.00, 2.40, 0.60);
+
+-- ---------------------------------------------------------------------
+-- Sala de Estar Minimalista: 5 m x 4 m con 2.7 m de alto.
+-- Las coordenadas no se escriben a mano: se calculan a partir de las
+-- medidas de la habitacion (h), de modo que el layout sigue siendo
+-- valido si se cambian alto/ancho/profundidad en el INSERT.
+--   centro de la sala:  (cx, cz) = (ancho / 2, profundidad / 2)
+--   mueble contra pared: Z = su profundidad / 2   o   Z = profundidad - p / 2
+--   butacas: sobre un circulo de radio r = 1.6 m alrededor de la mesa,
+--            en los angulos 0 y 180 grados -> (cx + r cos t, cz + r sin t)
+-- ---------------------------------------------------------------------
+INSERT INTO habitaciones (nombre, alto, ancho, profundidad, usuario_id)
+VALUES ('Sala de Estar Minimalista', 2.7, 5.0, 4.0,
+        (SELECT id FROM usuarios WHERE nombre_usuario = 'sistema'));
+
+INSERT INTO muebles_sugeridos
+  (habitacion_id, nombre, posicion_x, posicion_y, posicion_z, ancho, alto, profundidad)
+SELECT h.id, m.nombre, m.x, m.y, m.z, m.ancho, m.alto, m.profundidad
+FROM habitaciones h
+CROSS JOIN LATERAL (
+  VALUES
+    ('Sofa de tres puestos', h.ancho / 2,                          0.0::FLOAT, 0.90 / 2,
+                             2.20::FLOAT, 0.80::FLOAT, 0.90::FLOAT),
+    ('Mesa de centro',       h.ancho / 2,                          0.0,        h.profundidad / 2,
+                             1.00,        0.40,        0.60),
+    ('Alfombra',             h.ancho / 2,                          0.0,        h.profundidad / 2,
+                             2.00,        0.01,        1.40),
+    ('Mueble de TV',         h.ancho / 2,                          0.0,        h.profundidad - 0.40 / 2,
+                             1.80,        0.50,        0.40),
+    ('Butaca oeste',         h.ancho / 2 + 1.6 * cos(radians(180)), 0.0,       h.profundidad / 2 + 1.6 * sin(radians(180)),
+                             0.80,        0.80,        0.80),
+    ('Butaca este',          h.ancho / 2 + 1.6 * cos(radians(0)),   0.0,       h.profundidad / 2 + 1.6 * sin(radians(0)),
+                             0.80,        0.80,        0.80),
+    -- Esquina del fondo a la derecha, a 0.3 m de ambas paredes.
+    ('Lampara de pie',       h.ancho - 0.30,                       0.0,        0.30,
+                             0.30,        1.60,        0.30)
+) AS m (nombre, x, y, z, ancho, alto, profundidad)
+WHERE h.id = currval('habitaciones_id_seq');
