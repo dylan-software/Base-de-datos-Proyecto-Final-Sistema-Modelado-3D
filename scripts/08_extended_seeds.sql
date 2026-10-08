@@ -25,3 +25,22 @@ VALUES
   -- Z = 0.6 + 0.6 / 2: la silla empieza donde termina el escritorio.
   (currval('habitaciones_id_seq'), 'Silla ergonomica',   1.5, 0.0, 0.90,  0.60, 1.10, 0.60),
   (currval('habitaciones_id_seq'), 'Estante flotante',   1.5, 1.5, 0.125, 0.90, 0.25, 0.25);
+
+-- ---------------------------------------------------------------------
+-- Dormitorio Principal: 4.5 m de ancho, 4 m de profundidad y 2.6 m de alto.
+-- La cama king (1.93 x 2.03 m) apoya la cabecera en la pared del fondo y
+-- queda centrada en X; cada mesa de noche deja 5 cm de holgura con ella:
+--   X = 2.25 +/- (1.93 / 2 + 0.05 + 0.50 / 2) = 2.25 +/- 1.265
+-- El armario empotrado ocupa la pared opuesta (Z = 4.0 - 0.6 / 2).
+-- ---------------------------------------------------------------------
+INSERT INTO habitaciones (nombre, alto, ancho, profundidad, usuario_id)
+VALUES ('Dormitorio Principal', 2.6, 4.5, 4.0,
+        (SELECT id FROM usuarios WHERE nombre_usuario = 'sistema'));
+
+INSERT INTO muebles_sugeridos
+  (habitacion_id, nombre, posicion_x, posicion_y, posicion_z, ancho, alto, profundidad)
+VALUES
+  (currval('habitaciones_id_seq'), 'Cama king',           2.250, 0.0, 1.015, 1.93, 0.60, 2.03),
+  (currval('habitaciones_id_seq'), 'Mesa de noche izq.',  0.985, 0.0, 0.200, 0.50, 0.55, 0.40),
+  (currval('habitaciones_id_seq'), 'Mesa de noche der.',  3.515, 0.0, 0.200, 0.50, 0.55, 0.40),
+  (currval('habitaciones_id_seq'), 'Armario empotrado',   1.200, 0.0, 3.700, 2.00, 2.40, 0.60);
