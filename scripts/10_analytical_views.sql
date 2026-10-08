@@ -1,0 +1,6 @@
+-- Vistas analiticas para reportes. Ejecutar despues de
+-- 09_performance_indexes.sql.
+-- Todas usan security_invoker (PostgreSQL 15+): la vista se evalua con los
+-- permisos de quien la consulta, asi las politicas RLS de
+-- 11_supabase_policies.sql tambien filtran los reportes. Sin esa opcion
+-- la vista corre como su dueno y expondria las filas de todas las cuentas.
