@@ -1,0 +1,5 @@
+-- Indices de rendimiento para las consultas del Canvas 3D. Ejecutar
+-- despues de 08_extended_seeds.sql.
+-- Todos son B-Tree (el tipo por defecto de CREATE INDEX): las consultas
+-- filtran por igualdad sobre la llave y por rango sobre las coordenadas.
+-- IF NOT EXISTS permite volver a ejecutar el script sin error.
