@@ -53,6 +53,10 @@ historial de recomendaciones esteticas que devuelve la API de OmniRoute.
 | `scripts/procedures/sp_security.sql` | Extension `pgcrypto` y la funcion `fn_validar_sesion` |
 | `scripts/procedures/sp_triggers.sql` | Funcion `fn_log_mueble_movement` y trigger `trg_audit_muebles_cambios` |
 | `scripts/06_advanced_queries.sql` | Funcion `fn_distancia_euclidiana` para calculos espaciales |
+| `scripts/07_spatial_constraints.sql` | Medidas `ancho/alto/profundidad` de cada mueble, `fn_check_boundaries` y trigger `trg_muebles_limites_check` |
+| `scripts/procedures/sp_room_analytics.sql` | Funciones `fn_calcular_volumen_util` y `fn_calcular_volumen_mobiliario` |
+| `scripts/08_extended_seeds.sql` | Escenarios de prueba: oficina, dormitorio y sala de estar |
+| `docs/architecture_data.md` | Indices, planes de ejecucion medidos y troubleshooting de extensiones |
 
 ## Diagrama entidad-relacion
 
@@ -66,9 +70,11 @@ historial de recomendaciones esteticas que devuelve la API de OmniRoute.
 |    ancho        FLOAT    |          |    posicion_x    FLOAT       |
 |    profundidad  FLOAT    |          |    posicion_y    FLOAT       |
 |    creado_en    TIMESTAMPTZ         |    posicion_z    FLOAT       |
-+--------------------------+          |    creado_en     TIMESTAMPTZ |
-             |1                       +------------------------------+
-             |
++--------------------------+          |    ancho         FLOAT       |
+             |1                       |    alto          FLOAT       |
+             |                        |    profundidad   FLOAT       |
+             |                        |    creado_en     TIMESTAMPTZ |
+             |                        +------------------------------+
              |N
 +--------------------------+
 |       historial_ia       |
@@ -241,3 +247,78 @@ Para empezar de cero: `psql -d postgres -c "DROP DATABASE IF EXISTS modelado_3d;
 
 > Estos scripts son para PostgreSQL local. `CREATE DATABASE` y `\c` no funcionan en el SQL Editor de
 > Supabase; para Supabase usa `schema.sql` como se describe arriba.
+
+## Motor analitico SQL
+
+Convencion de ejes, igual a la de Three.js: **X** es el ancho, **Y** la altura desde el piso y **Z** la
+profundidad, en metros desde la esquina origen de la habitacion. La posicion de un mueble es el centro de
+su base.
+
+### Distancia euclidiana (`fn_distancia_euclidiana`)
+
+Para dos puntos P1 = (x1, y1, z1) y P2 = (x2, y2, z2):
+
+```
+d(P1, P2) = sqrt( (x2 - x1)^2 + (y2 - y1)^2 + (z2 - z1)^2 )
+```
+
+Es el teorema de Pitagoras aplicado dos veces: primero la diagonal en el piso, sqrt(dx^2 + dz^2), y luego
+la hipotenusa entre esa diagonal y la diferencia de altura dy. La funcion es `IMMUTABLE` y `STRICT`: solo
+depende de sus argumentos y devuelve `NULL` si alguno es `NULL`.
+
+```sql
+-- Sofa y mesa de centro de la sala de estar: (2.5, 0, 0.45) y (2.5, 0, 2.0)
+SELECT fn_distancia_euclidiana(2.5, 0, 0.45, 2.5, 0, 2.0);   -- 1.55
+```
+
+### Validacion de limites (`trg_muebles_limites_check`)
+
+Un mueble de medidas (a, h, p) en la posicion (x, y, z) dentro de una habitacion de medidas
+(ancho, alto, profundidad) es valido solo si su caja envolvente cabe en la de la habitacion:
+
+```
+0 <= x - a/2      y   x + a/2 <= ancho
+0 <= y            y   y + h   <= alto
+0 <= z - p/2      y   z + p/2 <= profundidad
+```
+
+- `fn_check_boundaries()` evalua las tres desigualdades y, si alguna falla, aborta con
+  `check_violation` (SQLSTATE `23514`) indicando el eje y el intervalo ocupado.
+- El trigger es `BEFORE INSERT OR UPDATE OF habitacion_id, posicion_*, ancho, alto, profundidad`: la fila
+  invalida nunca llega a escribirse, y como corre antes que `trg_audit_muebles_cambios` (AFTER), un
+  movimiento rechazado tampoco queda en la auditoria.
+- Las medidas son opcionales; si faltan, el mueble se valida como un punto (a = h = p = 0).
+- Se admite un margen de 1e-9 m para el redondeo de `FLOAT`, asi un mueble pegado a la pared no se rechaza.
+
+```sql
+INSERT INTO muebles_sugeridos (habitacion_id, nombre, posicion_x, posicion_y, posicion_z)
+VALUES (1, 'Lampara', 4.5, 0, 1);
+-- ERROR:  Mueble "Lampara" fuera de la habitacion 1 en el eje X
+-- DETAIL: Ocupa [4.5, 4.5] y el ancho permitido es [0, 4].
+```
+
+### Ocupacion volumetrica
+
+```
+V_habitacion = alto * ancho * profundidad                    -- fn_calcular_volumen_util(id)
+V_muebles    = suma de (ancho * alto * profundidad) por mueble -- fn_calcular_volumen_mobiliario(id)
+ocupacion    = 100 * V_muebles / V_habitacion
+```
+
+`V_muebles` usa la caja envolvente de cada mueble, por lo que sobreestima la ocupacion de formas
+irregulares; los muebles sin medidas aportan 0.
+
+```sql
+SELECT h.nombre,
+       round((100 * fn_calcular_volumen_mobiliario(h.id)
+                  / fn_calcular_volumen_util(h.id))::NUMERIC, 2) AS ocupacion_pct
+FROM habitaciones h;
+```
+
+Ejecucion, despues de `06_advanced_queries.sql`:
+
+```bash
+psql -d modelado_3d -f scripts/07_spatial_constraints.sql
+psql -d modelado_3d -f scripts/procedures/sp_room_analytics.sql
+psql -d modelado_3d -f scripts/08_extended_seeds.sql
+```
