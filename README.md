@@ -56,7 +56,12 @@ historial de recomendaciones esteticas que devuelve la API de OmniRoute.
 | `scripts/07_spatial_constraints.sql` | Medidas `ancho/alto/profundidad` de cada mueble, `fn_check_boundaries` y trigger `trg_muebles_limites_check` |
 | `scripts/procedures/sp_room_analytics.sql` | Funciones `fn_calcular_volumen_util` y `fn_calcular_volumen_mobiliario` |
 | `scripts/08_extended_seeds.sql` | Escenarios de prueba: oficina, dormitorio y sala de estar |
+| `scripts/09_performance_indexes.sql` | Indices compuestos `idx_habitaciones_usuario_creado` e `idx_muebles_habitacion_xz` |
+| `scripts/10_analytical_views.sql` | Vistas `vw_resumen_espacios_por_usuario` y `vw_densidad_mobiliario` |
+| `scripts/procedures/sp_maintenance.sql` | Funcion `fn_purgar_habitaciones_vacias` |
+| `scripts/11_supabase_policies.sql` | Columna `usuarios.auth_id` y politicas RLS de `habitaciones` y `muebles_sugeridos` (solo Supabase) |
 | `docs/architecture_data.md` | Indices, planes de ejecucion medidos y troubleshooting de extensiones |
+| `docs/performance_tuning.md` | Planes `EXPLAIN ANALYZE` de los indices compuestos y de las politicas RLS |
 
 ## Diagrama entidad-relacion
 
@@ -321,4 +326,91 @@ Ejecucion, despues de `06_advanced_queries.sql`:
 psql -d modelado_3d -f scripts/07_spatial_constraints.sql
 psql -d modelado_3d -f scripts/procedures/sp_room_analytics.sql
 psql -d modelado_3d -f scripts/08_extended_seeds.sql
+```
+
+## Rendimiento, vistas y seguridad RLS en Supabase
+
+### Indices compuestos (`09_performance_indexes.sql`)
+
+| Indice | Columnas | Consulta que acelera |
+|---|---|---|
+| `idx_habitaciones_usuario_creado` | `(usuario_id, creado_en DESC)` | Habitaciones de una cuenta, de la mas reciente a la mas antigua, y el filtro de la politica RLS |
+| `idx_muebles_habitacion_xz` | `(habitacion_id, posicion_x, posicion_z)` | Muebles de una habitacion dentro de una franja X-Z, antes del raycasting del Canvas 3D |
+
+Ambos reemplazan a los indices de una sola columna `idx_habitaciones_usuario` e `idx_muebles_habitacion`,
+que son su prefijo, y el script los elimina. Con 100 000 muebles, la consulta de la franja paso de leer 50
+filas y 52 paginas a leer 1 fila y 4 paginas. El detalle esta en `docs/performance_tuning.md`.
+
+### Vistas analiticas (`10_analytical_views.sql`)
+
+| Vista | Columnas |
+|---|---|
+| `vw_resumen_espacios_por_usuario` | `usuario_id`, `nombre_usuario`, `total_habitaciones`, `ultima_habitacion_en` |
+| `vw_densidad_mobiliario` | `habitacion_id`, `usuario_id`, `nombre`, `area_util_m2`, `total_muebles`, `muebles_por_m2`, `huella_piso_pct` |
+
+```
+area_util_m2    = ancho * profundidad                      (planta X-Z de la habitacion)
+muebles_por_m2  = total_muebles / area_util_m2
+huella_piso_pct = 100 * suma(ancho * profundidad del mueble) / area_util_m2
+```
+
+Las dos usan `security_invoker = true` (PostgreSQL 15+): se evaluan con los permisos de quien consulta, asi
+que las politicas RLS tambien filtran los reportes y cada usuario solo ve sus propias filas.
+
+### Limpieza de habitaciones vacias (`procedures/sp_maintenance.sql`)
+
+`fn_purgar_habitaciones_vacias(p_antiguedad INTERVAL DEFAULT '7 days')` borra las habitaciones sin muebles
+creadas hace mas de `p_antiguedad` y devuelve cuantas borro. El margen protege las habitaciones que el
+usuario acaba de crear. El permiso `EXECUTE` se revoca a `PUBLIC`, `anon` y `authenticated`: solo el dueno
+de las tablas puede llamarla, y no queda expuesta como RPC en la API de Supabase.
+
+```sql
+SELECT fn_purgar_habitaciones_vacias();                    -- margen de 7 dias
+SELECT fn_purgar_habitaciones_vacias(INTERVAL '1 day');
+
+-- Programada con pg_cron, todos los dias a las 03:00 UTC
+SELECT cron.schedule('purgar-habitaciones-vacias', '0 3 * * *',
+                     $$SELECT fn_purgar_habitaciones_vacias()$$);
+```
+
+### Politicas RLS (`11_supabase_policies.sql`)
+
+Este script es el unico de `scripts/` que necesita Supabase: usa `auth.users` y `auth.uid()`. Se aplica
+cuando el esquema de `scripts/` se despliega en un proyecto de Supabase y el frontend lee las tablas
+directamente por la API REST con el JWT del usuario.
+
+| Pieza | Efecto |
+|---|---|
+| `usuarios.auth_id UUID` | Enlaza la cuenta local (`usuarios.id`, `INTEGER`) con la de Supabase Auth (`auth.uid()`, `UUID`) |
+| `ENABLE ROW LEVEL SECURITY` en `habitaciones` y `muebles_sugeridos` | Sin politica, `anon` y `authenticated` no ven ninguna fila |
+| `pol_habitaciones_select_propias` | `authenticated` lee solo las habitaciones cuyo `usuario_id` es el de su `auth_id` |
+| `pol_muebles_select_propios` | `authenticated` lee solo los muebles de esas habitaciones |
+
+- Solo hay politicas `SELECT`: por la API nadie puede insertar, modificar ni borrar. Las escrituras pasan
+  por el backend, que se conecta como dueno de las tablas y no es filtrado por RLS.
+- `anon` no tiene politica: una peticion sin sesion recibe 0 filas, no un error.
+- Una cuenta con `auth_id` en `NULL` (por ejemplo `sistema`) no ve nada por la API.
+- `auth.uid()` va envuelta en `(SELECT ...)` y la lista de habitaciones en `ARRAY(...)` para que PostgreSQL
+  las calcule una vez por consulta y use los indices; con `IN (...)` el conteo de muebles recorria la
+  tabla completa (28 ms contra 2 ms con 100 000 filas).
+
+Enlazar una cuenta y comprobar el aislamiento desde el SQL Editor:
+
+```sql
+UPDATE usuarios SET auth_id = '<uuid de Authentication -> Users>' WHERE nombre_usuario = '<usuario>';
+
+BEGIN;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims', '{"sub": "<uuid>", "role": "authenticated"}', true);
+SELECT * FROM vw_resumen_espacios_por_usuario;   -- espera solo la fila de ese usuario
+ROLLBACK;
+```
+
+Ejecucion, despues de `08_extended_seeds.sql`. Los tres primeros funcionan tambien en PostgreSQL local:
+
+```bash
+psql -d modelado_3d -f scripts/09_performance_indexes.sql
+psql -d modelado_3d -f scripts/10_analytical_views.sql
+psql -d modelado_3d -f scripts/procedures/sp_maintenance.sql
+psql -d modelado_3d -f scripts/11_supabase_policies.sql      # solo en Supabase
 ```
