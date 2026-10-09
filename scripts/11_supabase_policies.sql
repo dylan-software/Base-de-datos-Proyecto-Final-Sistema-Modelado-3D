@@ -13,3 +13,7 @@
 -- "sistema"); una cuenta sin auth_id no ve nada por la API.
 ALTER TABLE usuarios
   ADD COLUMN IF NOT EXISTS auth_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE SET NULL;
+
+-- Con RLS activo y sin politicas, anon y authenticated no ven ninguna
+-- fila: se niega todo por defecto y cada politica abre solo lo necesario.
+ALTER TABLE habitaciones ENABLE ROW LEVEL SECURITY;
