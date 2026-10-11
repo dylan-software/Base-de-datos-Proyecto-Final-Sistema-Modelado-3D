@@ -1,0 +1,4 @@
+# Fin de linea LF para todos los scripts y documentos, sin importar el
+# core.autocrlf de cada equipo: psql, el SQL Editor de Supabase y git diff
+# ven el mismo archivo en Windows, Linux y macOS.
+* text=auto eol=lf
