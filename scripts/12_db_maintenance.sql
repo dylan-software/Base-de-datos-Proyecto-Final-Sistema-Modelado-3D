@@ -52,15 +52,55 @@ BEGIN
 END;
 $$;
 
+-- Reconstruye los indices B-Tree cuya primera columna es una llave
+-- foranea: los que usan el Canvas 3D (muebles de una habitacion, franja
+-- X-Z), el panel de habitaciones y el historial de posiciones. Despues de
+-- muchos UPDATE y DELETE sus paginas quedan medio vacias; REINDEX los
+-- escribe de nuevo compactos. Devuelve el tamano de cada indice antes y
+-- despues, en bytes. Un indice que no existe (por ejemplo si no se aplico
+-- 09_performance_indexes.sql) se omite.
+-- REINDEX INDEX bloquea las escrituras sobre la tabla y las lecturas que
+-- usarian el indice, y dentro de una funcion los bloqueos duran hasta el
+-- final de la transaccion: correrla en una ventana de poco uso. Sin
+-- bloqueos, a mano y fuera de una transaccion:
+--   REINDEX INDEX CONCURRENTLY idx_muebles_habitacion_xz;
+CREATE OR REPLACE FUNCTION fn_reindexar_tablas_espaciales()
+RETURNS TABLE (indice TEXT, bytes_antes BIGINT, bytes_despues BIGINT)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_nombre  TEXT;
+  v_indice  REGCLASS;
+BEGIN
+  FOREACH v_nombre IN ARRAY ARRAY[
+    'idx_muebles_habitacion_xz',
+    'idx_habitaciones_usuario_creado',
+    'idx_auditoria_muebles_mueble'
+  ]
+  LOOP
+    v_indice := to_regclass(v_nombre);
+    CONTINUE WHEN v_indice IS NULL;
+
+    indice := v_nombre;
+    bytes_antes := pg_relation_size(v_indice);
+    EXECUTE format('REINDEX INDEX %s', v_indice);
+    bytes_despues := pg_relation_size(v_indice);
+    RETURN NEXT;
+  END LOOP;
+END;
+$$;
+
 -- Solo el dueno de las tablas debe mantenerlas (ANALYZE y REINDEX lo
 -- exigen de todos modos). Como en sp_maintenance.sql, se revoca EXECUTE a
 -- PUBLIC y a los roles de la API de Supabase cuando existen.
 REVOKE EXECUTE ON PROCEDURE sp_ejecutar_vacuum_analitico(NUMERIC) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION fn_reindexar_tablas_espaciales() FROM PUBLIC;
 
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
     REVOKE EXECUTE ON PROCEDURE sp_ejecutar_vacuum_analitico(NUMERIC) FROM anon, authenticated;
+    REVOKE EXECUTE ON FUNCTION fn_reindexar_tablas_espaciales() FROM anon, authenticated;
   END IF;
 END;
 $$;
@@ -70,3 +110,5 @@ $$;
 --                      $$VACUUM (ANALYZE) muebles_sugeridos$$);
 -- SELECT cron.schedule('diagnostico-muebles', '45 3 * * *',
 --                      $$CALL sp_ejecutar_vacuum_analitico()$$);
+-- SELECT cron.schedule('reindexar-espaciales', '0 4 * * 0',
+--                      $$SELECT * FROM fn_reindexar_tablas_espaciales()$$);
