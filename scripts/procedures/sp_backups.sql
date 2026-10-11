@@ -1,0 +1,10 @@
+-- Respaldo logico por habitacion. Ejecutar despues de 13_partitioning.sql.
+-- Exporta el plano 3D completo de una habitacion (medidas y muebles) como
+-- texto JSON.
+--
+-- No reemplaza a los respaldos fisicos (pg_dump o los backups diarios de
+-- Supabase): sirve para guardar o mover el layout de una sola habitacion,
+-- por ejemplo antes de que la IA de OmniRoute la reorganice. Es un respaldo
+-- "en caliente": la exportacion es una sola consulta, que no bloquea a los
+-- demas usuarios y ve una foto consistente de la habitacion aunque alguien
+-- este moviendo muebles en ese momento.
