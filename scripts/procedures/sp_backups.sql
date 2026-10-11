@@ -1,6 +1,6 @@
 -- Respaldo logico por habitacion. Ejecutar despues de 13_partitioning.sql.
 -- Exporta el plano 3D completo de una habitacion (medidas y muebles) como
--- texto JSON.
+-- texto JSON y deja constancia de cada copia en log_respaldos.
 --
 -- No reemplaza a los respaldos fisicos (pg_dump o los backups diarios de
 -- Supabase): sirve para guardar o mover el layout de una sola habitacion,
@@ -8,6 +8,28 @@
 -- "en caliente": la exportacion es una sola consulta, que no bloquea a los
 -- demas usuarios y ve una foto consistente de la habitacion aunque alguien
 -- este moviendo muebles en ese momento.
+
+-- Bitacora de respaldos ejecutados. Si despues se borra la habitacion,
+-- habitacion_id queda en NULL pero el registro de la copia se conserva.
+-- checksum_md5 permite comprobar que un respaldo guardado fuera de la base
+-- es exactamente el que se exporto.
+CREATE TABLE log_respaldos (
+  id             BIGSERIAL PRIMARY KEY,
+  habitacion_id  INTEGER REFERENCES habitaciones(id) ON DELETE SET NULL,
+  total_muebles  INTEGER NOT NULL,
+  tamano_bytes   INTEGER NOT NULL,
+  checksum_md5   CHAR(32) NOT NULL,
+  ejecutado_por  TEXT NOT NULL DEFAULT current_user,
+  ejecutado_en   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_log_respaldos_habitacion
+  ON log_respaldos (habitacion_id, ejecutado_en DESC);
+
+-- En Supabase toda tabla de public queda expuesta por la API REST. Con RLS
+-- activo y sin politicas, anon y authenticated no leen ni escriben la
+-- bitacora; el dueno de las tablas no es filtrado.
+ALTER TABLE log_respaldos ENABLE ROW LEVEL SECURITY;
 
 -- Empaqueta una habitacion y todos sus muebles en un texto JSON:
 --   {"version": 1, "exportado_en": ..., "habitacion": {...},
