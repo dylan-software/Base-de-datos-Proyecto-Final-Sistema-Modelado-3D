@@ -15,4 +15,45 @@
 
 BEGIN;
 
+-- La tabla actual se aparta con otro nombre. Su indice de llave primaria
+-- tambien, para que la tabla nueva pueda usar historial_ia_pkey.
+ALTER TABLE historial_ia RENAME TO historial_ia_legacy;
+ALTER INDEX historial_ia_pkey RENAME TO historial_ia_legacy_pkey;
+
+-- Mismas columnas que en 01_schema.sql, particionada por rangos anuales de
+-- creado_en. La llave primaria de una tabla particionada tiene que incluir
+-- la columna de particion, por eso pasa a ser (id, creado_en); id sigue
+-- saliendo de la misma secuencia, asi que no se repite. Cada rango es
+-- [desde, hasta): una fila con creado_en justo en el limite va a la
+-- particion siguiente.
+CREATE TABLE historial_ia (
+  id             INTEGER NOT NULL DEFAULT nextval('historial_ia_id_seq'),
+  habitacion_id  INTEGER NOT NULL REFERENCES habitaciones(id) ON DELETE CASCADE,
+  recomendacion  TEXT NOT NULL,
+  creado_en      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (id, creado_en)
+) PARTITION BY RANGE (creado_en);
+
+-- Recomendaciones recientes de una habitacion. El indice se declara en la
+-- tabla padre y PostgreSQL lo crea en cada particion, tambien en las que se
+-- agreguen despues.
+CREATE INDEX idx_historial_ia_habitacion
+  ON historial_ia (habitacion_id, creado_en DESC);
+
+-- Recibe las filas que no caen en ningun rango: el historial de los anos
+-- anteriores y cualquier fecha para la que todavia no exista particion.
+-- Sin ella, un INSERT asi fallaria con "no partition of relation found".
+CREATE TABLE historial_ia_default PARTITION OF historial_ia DEFAULT;
+
+-- Copia: cada fila cae sola en su particion segun creado_en.
+INSERT INTO historial_ia (id, habitacion_id, recomendacion, creado_en)
+SELECT id, habitacion_id, recomendacion, creado_en
+FROM historial_ia_legacy;
+
+-- La secuencia pertenecia a historial_ia_legacy.id y se borraria con ella:
+-- pasa a pertenecer a la tabla nueva antes del DROP.
+ALTER SEQUENCE historial_ia_id_seq OWNED BY historial_ia.id;
+
+DROP TABLE historial_ia_legacy;
+
 COMMIT;
