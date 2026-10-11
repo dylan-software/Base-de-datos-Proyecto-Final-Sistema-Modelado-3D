@@ -45,6 +45,14 @@ CREATE INDEX idx_historial_ia_habitacion
 -- Sin ella, un INSERT asi fallaria con "no partition of relation found".
 CREATE TABLE historial_ia_default PARTITION OF historial_ia DEFAULT;
 
+-- Periodo actual: el ano 2026, que contiene el semestre en curso (2026-2).
+-- Va antes de copiar las filas: si se creara despues, las de 2026 ya
+-- estarian en historial_ia_default y PostgreSQL rechazaria la particion.
+-- Los limites llevan +00 para no depender de la zona horaria de la sesion.
+-- Al empezar cada ano se crea la siguiente (ver docs/maintenance_guide.md).
+CREATE TABLE historial_ia_2026 PARTITION OF historial_ia
+  FOR VALUES FROM ('2026-01-01 00:00:00+00') TO ('2027-01-01 00:00:00+00');
+
 -- Copia: cada fila cae sola en su particion segun creado_en.
 INSERT INTO historial_ia (id, habitacion_id, recomendacion, creado_en)
 SELECT id, habitacion_id, recomendacion, creado_en
