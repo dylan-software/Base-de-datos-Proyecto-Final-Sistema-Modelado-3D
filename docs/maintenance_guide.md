@@ -61,3 +61,83 @@ CREATE TABLE historial_ia_2027 PARTITION OF historial_ia
 
 Para retirar un ano viejo sin `DELETE` masivo: `ALTER TABLE historial_ia DETACH PARTITION historial_ia_2026;`
 y luego exportarla con `pg_dump -t historial_ia_2026` o borrarla con `DROP TABLE`.
+
+## Monitoreo del almacenamiento en Supabase
+
+### Desde el dashboard
+
+- **Reports -> Database:** uso de disco, memoria y CPU del proyecto en el tiempo.
+- **Usage** de la organizacion: tamano de la base frente al limite del plan. El plan
+  gratuito permite 500 MB por proyecto; al pasarlo, Supabase puede poner la base en solo lectura.
+- **Database -> Extensions:** activar `pg_cron` para las tareas programadas y `pgstattuple` para medir la
+  fragmentacion de los indices.
+
+### Tamano de la base y de cada tabla
+
+```sql
+-- Base completa
+SELECT pg_size_pretty(pg_database_size(current_database()));
+
+-- Tablas del esquema public: datos, indices y total (incluye TOAST)
+SELECT c.relname                                       AS tabla,
+       pg_size_pretty(pg_relation_size(c.oid))         AS datos,
+       pg_size_pretty(pg_indexes_size(c.oid))          AS indices,
+       pg_size_pretty(pg_total_relation_size(c.oid))   AS total
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND c.relkind = 'r'
+ORDER BY pg_total_relation_size(c.oid) DESC;
+
+-- Particiones de historial_ia (la tabla padre no guarda filas: mide 0)
+SELECT i.inhrelid::REGCLASS                                AS particion,
+       pg_size_pretty(pg_total_relation_size(i.inhrelid))  AS total
+FROM pg_inherits i
+WHERE i.inhparent = 'historial_ia'::REGCLASS
+ORDER BY 1;
+```
+
+### Tuplas muertas y ultimo mantenimiento
+
+```sql
+SELECT relname, n_live_tup, n_dead_tup,
+       round(100.0 * n_dead_tup / GREATEST(n_live_tup + n_dead_tup, 1), 2) AS pct_muertas,
+       last_vacuum, last_autovacuum, last_analyze, last_autoanalyze
+FROM pg_stat_user_tables
+ORDER BY n_dead_tup DESC;
+```
+
+| Metrica | Valor sano | Que hacer si se pasa |
+|---|---|---|
+| `pct_muertas` de `muebles_sugeridos` | Menos de 10 % | `VACUUM (ANALYZE) muebles_sugeridos` |
+| `last_autovacuum` / `last_vacuum` | Menos de unos dias en tablas con escrituras | Revisar que pg_cron este corriendo (`cron.job_run_details`) |
+| Tamano total frente al plan | Menos de 80 % del limite | Purgar habitaciones vacias y retirar particiones viejas de `historial_ia` |
+
+`VACUUM` normal no devuelve espacio al sistema operativo: deja las paginas libres para las proximas escrituras,
+asi que la tabla deja de crecer pero no se encoge. Solo `VACUUM FULL` la encoge, y bloquea la tabla completa
+mientras la reescribe; usarlo solo si la tabla quedo muy inflada y en la ventana de mantenimiento.
+
+### Fragmentacion de los indices
+
+Con `pgstattuple` activado:
+
+```sql
+SELECT 'idx_muebles_habitacion_xz' AS indice, avg_leaf_density, leaf_fragmentation
+FROM pgstatindex('idx_muebles_habitacion_xz')
+UNION ALL
+SELECT 'idx_habitaciones_usuario_creado', avg_leaf_density, leaf_fragmentation
+FROM pgstatindex('idx_habitaciones_usuario_creado');
+
+-- Uso real de cada indice desde el ultimo reinicio de estadisticas
+SELECT indexrelname, idx_scan, pg_size_pretty(pg_relation_size(indexrelid)) AS tamano
+FROM pg_stat_user_indexes
+ORDER BY idx_scan;
+```
+
+| Metrica | Recien creado | Reindexar cuando |
+|---|---|---|
+| `avg_leaf_density` | ~90 % (el `fillfactor` por defecto de un B-Tree) | Baja de 70 %: las hojas estan medio vacias y cada busqueda lee mas paginas |
+| `leaf_fragmentation` | Cerca de 0 % | Supera 30 %: las hojas ya no estan en orden fisico |
+| `bytes_despues` de `fn_reindexar_tablas_espaciales()` | | Si es igual a `bytes_antes` cada semana, se puede pasar a frecuencia mensual |
+
+Un indice con `idx_scan = 0` despues de semanas de uso no lo esta usando ninguna consulta: ocupa espacio y
+hace mas lentas las escrituras sin acelerar nada.
