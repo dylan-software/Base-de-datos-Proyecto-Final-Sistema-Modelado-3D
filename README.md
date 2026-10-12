@@ -64,6 +64,10 @@ historial de recomendaciones esteticas que devuelve la API de OmniRoute.
 | `docs/performance_tuning.md` | Planes `EXPLAIN ANALYZE` de los indices compuestos y de las politicas RLS |
 | `scripts/qa_tests/` | Suite de pruebas SQL (8 pruebas y el orquestador `run_qa_suite.sql`) |
 | `docs/qa_strategy.md` | Convenciones de las pruebas, matrices de cobertura y flujo de una lectura con RLS |
+| `scripts/12_db_maintenance.sql` | Procedimiento `sp_ejecutar_vacuum_analitico` y funcion `fn_reindexar_tablas_espaciales` |
+| `scripts/13_partitioning.sql` | Convierte `historial_ia` en tabla particionada por rango de `creado_en` |
+| `scripts/procedures/sp_backups.sql` | Tabla `log_respaldos` y funciones `fn_generar_backup_json_habitacion` y `fn_registrar_respaldo` |
+| `docs/maintenance_guide.md` | Ventanas de mantenimiento, monitoreo del almacenamiento en Supabase y diagrama de las rutinas |
 
 ## Diagrama entidad-relacion
 
@@ -465,3 +469,59 @@ psql "postgres://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabas
 Termina con `== Suite de QA completada sin fallos ==`. Si una prueba falla, `psql` sale con codigo 3, lo que
 permite usar el orquestador en un pipeline de CI. Las convenciones de las pruebas, las matrices de cobertura y
 la forma en que se valido la suite estan en `docs/qa_strategy.md`.
+
+## Mantenimiento automatizado (pg_cron y PL/pgSQL)
+
+Rutinas para mantener compactas las tablas que mas cambian, partir el historial de la IA por fechas y
+respaldar habitaciones individuales. Todas se ejecutan como dueno de las tablas: `EXECUTE` esta revocado a
+`PUBLIC`, `anon` y `authenticated`, asi que ninguna queda publicada como RPC en la API de Supabase.
+
+| Pieza | Archivo | Que hace |
+|---|---|---|
+| `sp_ejecutar_vacuum_analitico(umbral DEFAULT 0.10)` | `12_db_maintenance.sql` | `ANALYZE` de `muebles_sugeridos` y `NOTICE` si las tuplas muertas superan el umbral |
+| `fn_reindexar_tablas_espaciales()` | `12_db_maintenance.sql` | `REINDEX` de `idx_muebles_habitacion_xz`, `idx_habitaciones_usuario_creado` e `idx_auditoria_muebles_mueble`; devuelve el tamano antes y despues |
+| `historial_ia` particionada | `13_partitioning.sql` | `PARTITION BY RANGE (creado_en)` con `historial_ia_2026` (periodo actual) e `historial_ia_default` (anos anteriores); llave primaria `(id, creado_en)` |
+| `log_respaldos` | `procedures/sp_backups.sql` | Una fila por respaldo: habitacion, numero de muebles, tamano, `checksum_md5`, quien y cuando |
+| `fn_generar_backup_json_habitacion(id)` | `procedures/sp_backups.sql` | Devuelve la habitacion y sus muebles como texto JSON y la registra en `log_respaldos` con `fn_registrar_respaldo` |
+
+- **`VACUUM` va fuera del procedimiento.** PostgreSQL no permite `VACUUM` dentro de una funcion, un
+  procedimiento ni una transaccion. Se programa como sentencia suelta en pg_cron, que ejecuta cada tarea por
+  separado; el procedimiento refresca estadisticas y confirma el resultado.
+- **`REINDEX` bloquea.** Mientras corre, `fn_reindexar_tablas_espaciales()` bloquea las escrituras sobre las
+  tres tablas; por eso se programa semanalmente en la ventana de menor uso.
+- **Particiones.** Una consulta con rango de fechas dentro de 2026 lee solo `historial_ia_2026`. Cada diciembre
+  se crea la particion del ano siguiente; un ano viejo se retira con `DETACH PARTITION` sin `DELETE` masivo.
+- **Respaldos.** La exportacion es un solo `SELECT`: no bloquea a otros usuarios y ve una foto consistente. El
+  registro en `log_respaldos` va en la misma transaccion, asi que solo existe si la exportacion termino bien.
+
+Tareas programadas con pg_cron (hora UTC; la ventana de 08:00 a 10:00 UTC es de 03:00 a 05:00 en Colombia):
+
+| Tarea | Cron | Comando |
+|---|---|---|
+| `purgar-habitaciones-vacias` | `0 3 * * *` | `SELECT fn_purgar_habitaciones_vacias()` |
+| `vacuum-muebles` | `30 8 * * *` | `VACUUM (ANALYZE) muebles_sugeridos` |
+| `diagnostico-muebles` | `45 8 * * *` | `CALL sp_ejecutar_vacuum_analitico()` |
+| `reindexar-espaciales` | `0 9 * * 0` | `SELECT * FROM fn_reindexar_tablas_espaciales()` |
+
+```sql
+-- Respaldo manual de la habitacion 1 y su registro
+SELECT fn_generar_backup_json_habitacion(1);
+SELECT habitacion_id, total_muebles, tamano_bytes, checksum_md5, ejecutado_en
+FROM log_respaldos ORDER BY ejecutado_en DESC;
+
+-- En que particion quedo cada recomendacion
+SELECT tableoid::REGCLASS AS particion, id, creado_en FROM historial_ia ORDER BY creado_en;
+```
+
+Ejecucion, despues de `11_supabase_policies.sql` (o de `procedures/sp_maintenance.sql` en PostgreSQL local).
+`13_partitioning.sql` se ejecuta una sola vez: renombra la tabla actual, copia sus filas a la particionada y la
+borra, todo en una transaccion.
+
+```bash
+psql -d modelado_3d -f scripts/12_db_maintenance.sql
+psql -d modelado_3d -f scripts/13_partitioning.sql
+psql -d modelado_3d -f scripts/procedures/sp_backups.sql
+```
+
+Las ventanas de tiempo, las consultas para vigilar el tamano de la base en Supabase y el diagrama de como
+estas rutinas mantienen las paginas calientes en memoria estan en `docs/maintenance_guide.md`.
