@@ -1,0 +1,9 @@
+-- Algebra vectorial tridimensional sobre las posiciones de los muebles.
+-- Ejecutar despues de 14_spatial_collisions.sql.
+--
+-- Cada mueble se trata como un vector posicion p = (x, y, z) medido desde
+-- la esquina origen de su habitacion, en metros, con la convencion de
+-- 07_spatial_constraints.sql: X -> ancho, Y -> alto, Z -> profundidad.
+-- Las operaciones se hacen componente a componente con agregados de SQL
+-- (AVG, SUM, ...), sin extensiones: funciona igual en PostgreSQL local y
+-- en Supabase.
