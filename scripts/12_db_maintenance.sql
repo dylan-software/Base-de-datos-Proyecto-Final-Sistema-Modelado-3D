@@ -106,9 +106,9 @@ END;
 $$;
 
 -- Programacion con pg_cron (horas en UTC; ver docs/maintenance_guide.md):
--- SELECT cron.schedule('vacuum-muebles', '30 3 * * *',
+-- SELECT cron.schedule('vacuum-muebles', '30 8 * * *',
 --                      $$VACUUM (ANALYZE) muebles_sugeridos$$);
--- SELECT cron.schedule('diagnostico-muebles', '45 3 * * *',
+-- SELECT cron.schedule('diagnostico-muebles', '45 8 * * *',
 --                      $$CALL sp_ejecutar_vacuum_analitico()$$);
--- SELECT cron.schedule('reindexar-espaciales', '0 4 * * 0',
+-- SELECT cron.schedule('reindexar-espaciales', '0 9 * * 0',
 --                      $$SELECT * FROM fn_reindexar_tablas_espaciales()$$);
