@@ -1,0 +1,13 @@
+-- Datos semilla masivos para pruebas de carga. Ejecutar despues de
+-- procedures/sp_vector_math.sql.
+-- Simula un hotel: muchas habitaciones parecidas, cada una con unos pocos
+-- muebles, para medir con EXPLAIN (ANALYZE) los indices de
+-- 09_performance_indexes.sql y los triggers que corren en cada INSERT
+-- (trg_impedir_superposicion y trg_muebles_limites_check).
+--
+-- Convencion: X -> ancho, Y -> alto, Z -> profundidad (metros). La
+-- posicion es el centro de la base del mueble. Todo queda a nombre de la
+-- cuenta "sistema" de 04_security.sql, y las habitaciones se reconocen por
+-- el prefijo 'Hotel Estres - ' en su nombre.
+-- Para borrar la simulacion (los muebles caen por ON DELETE CASCADE):
+--   DELETE FROM habitaciones WHERE nombre LIKE 'Hotel Estres - %';
