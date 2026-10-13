@@ -17,3 +17,19 @@ ALTER TABLE usuarios
 -- Con RLS activo y sin politicas, anon y authenticated no ven ninguna
 -- fila: se niega todo por defecto y cada politica abre solo lo necesario.
 ALTER TABLE habitaciones ENABLE ROW LEVEL SECURITY;
+
+-- Lectura solo de las habitaciones propias. La subconsulta traduce el
+-- UUID del JWT al usuarios.id local. Envolverla en (SELECT ...) la vuelve
+-- un InitPlan: se evalua una vez por consulta y no una vez por fila, y el
+-- filtro queda como usuario_id = <constante>, que usa
+-- idx_habitaciones_usuario_creado. Solo aplica al rol authenticated; anon
+-- no tiene politica y sigue sin ver nada.
+CREATE POLICY pol_habitaciones_select_propias
+  ON habitaciones
+  FOR SELECT
+  TO authenticated
+  USING (
+    usuario_id = (
+      SELECT u.id FROM usuarios u WHERE u.auth_id = (SELECT auth.uid())
+    )
+  );
