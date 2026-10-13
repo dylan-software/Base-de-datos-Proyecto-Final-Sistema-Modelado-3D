@@ -114,8 +114,8 @@ historial de recomendaciones esteticas que devuelve la API de OmniRoute.
 - **Roles:** `roles` se carga con `estudiante` y `administrador`. `usuario_roles` es la tabla puente
   muchos a muchos; su llave primaria compuesta evita asignar dos veces el mismo rol.
 - **Dueno de cada habitacion:** `04_security.sql` agrega `habitaciones.usuario_id` como llave foranea
-  `NOT NULL`. Las habitaciones que ya existian se asignan a la cuenta `sistema`, cuyo hash `!` no coincide
-  con ninguna firma bcrypt, por lo que no puede iniciar sesion.
+  `NOT NULL`. Las habitaciones que ya existian se asignan a la cuenta `sistema`, que esta inactiva y cuyo
+  hash es la firma bcrypt de un secreto aleatorio descartado, por lo que no puede iniciar sesion.
 - **Sesiones:** el navegador recibe un token; la base solo guarda su SHA-256 (`token_hash`).
   `fn_validar_sesion(token)` devuelve el `usuario_id` si la sesion no esta expirada ni revocada y la cuenta
   esta activa, o `NULL` en caso contrario.
