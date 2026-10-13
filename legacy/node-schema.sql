@@ -1,3 +1,8 @@
+-- OBSOLETE: schema of the old Node/TypeScript backend (tables furniture, projects, spaces,
+-- placed_items). The FastAPI backend does not use any of these tables.
+-- Do NOT run this file on Supabase; use ../schema.sql instead. Kept only as a reference while the
+-- old Node code (proyecto-3d-backend/src) is still in the backend repository.
+--
 -- Full schema. Works on Supabase (postgis + vector are both available
 -- as managed extensions there) and on the local Postgres via docker-compose.
 CREATE EXTENSION IF NOT EXISTS vector;
