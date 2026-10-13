@@ -132,6 +132,41 @@ psql -d modelado_3d -f scripts/06_advanced_queries.sql
 
 `CREATE EXTENSION pgcrypto` requiere un usuario con permiso para crear extensiones (por ejemplo `postgres`).
 
+## Auditoria de posiciones 3D (triggers)
+
+Cada vez que cambian las coordenadas de un mueble (por ejemplo cuando la IA de OmniRoute lo reubica), la
+base guarda la posicion anterior y la nueva sin que la aplicacion tenga que hacer nada extra.
+
+| Pieza | Archivo | Funcion |
+|---|---|---|
+| `auditoria_muebles` | `05_audit_logs.sql` | Una fila por movimiento: `old_x/old_y/old_z`, `new_x/new_y/new_z`, `modificado_por`, `modificado_en` |
+| `fn_log_mueble_movement()` | `procedures/sp_triggers.sql` | Compara `ROW(OLD.posicion_*)` con `ROW(NEW.posicion_*)` usando `IS NOT DISTINCT FROM`; si son iguales no hace nada, si difieren inserta en `auditoria_muebles` |
+| `trg_audit_muebles_cambios` | `procedures/sp_triggers.sql` | `AFTER UPDATE OF posicion_x, posicion_y, posicion_z ON muebles_sugeridos FOR EACH ROW` |
+
+Comportamiento:
+
+- **Solo coordenadas.** `UPDATE OF` hace que renombrar un mueble no dispare el trigger, y la comparacion
+  interna descarta los `UPDATE` que reescriben el mismo valor (`SET posicion_x = posicion_x`).
+- **AFTER, no BEFORE.** El registro se escribe cuando el cambio ya paso todas las restricciones. Como
+  corre dentro de la misma transaccion, si el `UPDATE` hace `ROLLBACK` tambien se descarta la auditoria.
+- **Quien lo movio.** El backend debe ejecutar `SET LOCAL app.usuario_id = '<id>'` al inicio de cada
+  transaccion; el trigger lo lee con `current_setting('app.usuario_id', true)`. Si no esta definido (un
+  `UPDATE` manual en `psql`), `modificado_por` queda en `NULL`.
+- **Borrado.** `auditoria_muebles.mueble_id` usa `ON DELETE CASCADE`: al eliminar un mueble se elimina su
+  historial, igual que el resto del esquema.
+
+Prueba rapida:
+
+```sql
+BEGIN;
+SET LOCAL app.usuario_id = '1';
+UPDATE muebles_sugeridos SET posicion_x = 2.5 WHERE nombre = 'Sofa';
+COMMIT;
+
+SELECT mueble_id, old_x, new_x, modificado_por FROM auditoria_muebles;
+-- espera 1 fila: old_x = 2.0, new_x = 2.5, modificado_por = 1
+```
+
 ## Despliegue y ejecucion de los scripts
 
 Requisitos: PostgreSQL 14+ con el cliente `psql` en el `PATH`. El servidor escucha por defecto en el
