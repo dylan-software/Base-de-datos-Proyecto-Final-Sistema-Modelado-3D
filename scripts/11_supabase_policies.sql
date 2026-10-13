@@ -33,3 +33,19 @@ CREATE POLICY pol_habitaciones_select_propias
       SELECT u.id FROM usuarios u WHERE u.auth_id = (SELECT auth.uid())
     )
   );
+
+-- Muebles: mismo aislamiento, heredado de la habitacion. La subconsulta
+-- sobre habitaciones pasa a su vez por pol_habitaciones_select_propias,
+-- asi que solo devuelve ids de habitaciones del usuario y no hace falta
+-- repetir la traduccion auth.uid() -> usuarios.id.
+-- Se usa = ANY(ARRAY(...)) y no IN (...): el ARRAY se calcula una vez como
+-- InitPlan y queda como condicion de idx_muebles_habitacion_xz. Con IN el
+-- planificador lo aplica como filtro y recorre todos los muebles de la
+-- tabla (ver docs/performance_tuning.md).
+ALTER TABLE muebles_sugeridos ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY pol_muebles_select_propios
+  ON muebles_sugeridos
+  FOR SELECT
+  TO authenticated
+  USING (habitacion_id = ANY (ARRAY(SELECT h.id FROM habitaciones h)));
