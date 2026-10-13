@@ -1,0 +1,9 @@
+-- Escenarios de prueba con medidas reales. Ejecutar despues de
+-- procedures/sp_room_analytics.sql: cada mueble pasa por el trigger
+-- trg_muebles_limites_check, asi que una coordenada mal calculada hace
+-- fallar el script en lugar de guardar un layout imposible.
+--
+-- Convencion: X -> ancho, Y -> alto, Z -> profundidad (metros). La
+-- posicion es el centro de la base del mueble. Las habitaciones quedan a
+-- nombre de la cuenta "sistema" de 04_security.sql, y cada bloque usa
+-- currval() para tomar el id de la habitacion recien insertada.
