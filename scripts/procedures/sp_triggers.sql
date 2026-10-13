@@ -30,3 +30,11 @@ BEGIN
   RETURN NULL;
 END;
 $$;
+
+-- AFTER UPDATE OF limita el disparo a los UPDATE que tocan alguna
+-- coordenada; renombrar un mueble no genera auditoria.
+CREATE TRIGGER trg_audit_muebles_cambios
+  AFTER UPDATE OF posicion_x, posicion_y, posicion_z
+  ON muebles_sugeridos
+  FOR EACH ROW
+  EXECUTE FUNCTION fn_log_mueble_movement();
