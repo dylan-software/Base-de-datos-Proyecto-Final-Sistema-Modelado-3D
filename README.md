@@ -68,6 +68,11 @@ historial de recomendaciones esteticas que devuelve la API de OmniRoute.
 | `scripts/13_partitioning.sql` | Convierte `historial_ia` en tabla particionada por rango de `creado_en` |
 | `scripts/procedures/sp_backups.sql` | Tabla `log_respaldos` y funciones `fn_generar_backup_json_habitacion` y `fn_registrar_respaldo` |
 | `docs/maintenance_guide.md` | Ventanas de mantenimiento, monitoreo del almacenamiento en Supabase y diagrama de las rutinas |
+| `scripts/14_spatial_collisions.sql` | Funcion `fn_verificar_colision_mueble` y trigger `trg_impedir_superposicion` |
+| `scripts/procedures/sp_vector_math.sql` | Funcion `fn_calcular_centro_masa_habitacion` |
+| `scripts/15_stress_seeds.sql` | Hotel de 20 habitaciones y 50 muebles para pruebas de carga |
+| `scripts/16_cron_jobs.sql` | Funcion `fn_purgar_logs_auditoria` y su tarea de pg_cron |
+| `docs/spatial_math_guide.md` | Algebra vectorial, colisiones por radio, integracion con el Octree y diagramas del modelo espacial |
 
 ## Diagrama entidad-relacion
 
@@ -499,6 +504,7 @@ Tareas programadas con pg_cron (hora UTC; la ventana de 08:00 a 10:00 UTC es de 
 | Tarea | Cron | Comando |
 |---|---|---|
 | `purgar-habitaciones-vacias` | `0 3 * * *` | `SELECT fn_purgar_habitaciones_vacias()` |
+| `purgar-logs-auditoria` | `15 8 * * *` | `SELECT * FROM fn_purgar_logs_auditoria(30)` (`16_cron_jobs.sql`, ver abajo) |
 | `vacuum-muebles` | `30 8 * * *` | `VACUUM (ANALYZE) muebles_sugeridos` |
 | `diagnostico-muebles` | `45 8 * * *` | `CALL sp_ejecutar_vacuum_analitico()` |
 | `reindexar-espaciales` | `0 9 * * 0` | `SELECT * FROM fn_reindexar_tablas_espaciales()` |
@@ -525,3 +531,107 @@ psql -d modelado_3d -f scripts/procedures/sp_backups.sql
 
 Las ventanas de tiempo, las consultas para vigilar el tamano de la base en Supabase y el diagrama de como
 estas rutinas mantienen las paginas calientes en memoria estan en `docs/maintenance_guide.md`.
+
+## Motor vectorial y control de colisiones
+
+La base de datos rechaza muebles superpuestos y calcula el centro de masa del mobiliario de cada habitacion con
+algebra vectorial en PL/pgSQL. La matematica, la integracion con el Octree del backend y los diagramas del
+modelo espacial estan en `docs/spatial_math_guide.md`.
+
+| Pieza | Archivo | Que hace |
+|---|---|---|
+| `fn_verificar_colision_mueble(hab, x, y, z, radio DEFAULT 0.10, excluir_id DEFAULT NULL)` | `14_spatial_collisions.sql` | Devuelve el id del mueble mas cercano a menos de `radio` metros del punto, o `NULL` si el espacio esta libre |
+| `trg_impedir_superposicion` | `14_spatial_collisions.sql` | `BEFORE INSERT ON muebles_sugeridos`: rechaza con `exclusion_violation` (23P01) un mueble a menos de 0.10 m de otro de su habitacion |
+| `fn_calcular_centro_masa_habitacion(hab)` | `procedures/sp_vector_math.sql` | `(avg(x), avg(y), avg(z))` de los muebles y cuantos son |
+| Hotel de estres | `15_stress_seeds.sql` | `Hotel Estres - Habitacion 01` a `20` con 50 muebles sobre la diagonal de cada planta |
+| `fn_purgar_logs_auditoria(dias DEFAULT 30)` | `16_cron_jobs.sql` | Borra de `logs_actividad` y `auditoria_muebles` lo que tenga mas de `dias` dias; se programa a diario si existe pg_cron |
+
+- **Colision = distancia entre posiciones menor que el radio.** Se compara el centro de la base de cada mueble,
+  no sus cajas: separar las cajas completas es trabajo del Octree. La base solo es la ultima barrera contra
+  duplicados (dobles clics, reintentos, `INSERT` manuales).
+- **Concurrencia.** Cada insercion toma `pg_advisory_xact_lock(14, habitacion_id)`: dos inserciones en la misma
+  habitacion se validan de una en una y no pueden aprobarse mutuamente.
+- **Orden de los triggers.** PostgreSQL los ejecuta en orden alfabetico, asi que `trg_impedir_superposicion`
+  corre antes que `trg_muebles_limites_check`.
+- **Solo `INSERT`.** Mover un mueble con `UPDATE` y los muebles que ya existian no se revisan. La
+  "Mesa de centro" y la "Alfombra" de `08_extended_seeds.sql` comparten posicion y fallarian si ese script se
+  ejecutara despues de `14_spatial_collisions.sql`.
+
+Ejecucion, despues de `procedures/sp_backups.sql`:
+
+```bash
+psql -d modelado_3d -f scripts/14_spatial_collisions.sql
+psql -d modelado_3d -f scripts/procedures/sp_vector_math.sql
+psql -d modelado_3d -f scripts/15_stress_seeds.sql
+psql -d modelado_3d -f scripts/16_cron_jobs.sql
+```
+
+`15_stress_seeds.sql` y `16_cron_jobs.sql` se pueden volver a ejecutar: el hotel no se duplica y la tarea de
+pg_cron se reemplaza. Sin pg_cron, `16_cron_jobs.sql` solo crea la funcion y avisa con un `NOTICE`.
+
+### Pruebalo en el SQL Editor
+
+<details>
+<summary>Insertar un mueble duplicado y ver como se rechaza</summary>
+
+```sql
+BEGIN;
+
+-- La "Silla 01-1" del hotel esta en (1.25, 0, 1.25). Un mueble a 5 cm choca.
+INSERT INTO muebles_sugeridos (habitacion_id, nombre, posicion_x, posicion_y, posicion_z)
+SELECT habitacion_id, 'Silla duplicada', posicion_x + 0.05, posicion_y, posicion_z
+FROM muebles_sugeridos WHERE nombre = 'Silla 01-1';
+-- ERROR:  Mueble "Silla duplicada" superpuesto con "Silla 01-1" (id ...) en la habitacion ...
+-- DETAIL: (1.3, 0, 1.25) esta a 0.0500 m de (1.25, 0, 1.25); el minimo es 0.1 m.
+
+ROLLBACK;
+```
+
+</details>
+
+<details>
+<summary>Preguntar si un punto esta libre antes de insertar</summary>
+
+```sql
+SELECT h.nombre,
+       fn_verificar_colision_mueble(h.id, 1.25, 0, 1.25)  AS choca_con,      -- id de la silla
+       fn_verificar_colision_mueble(h.id, 1.40, 0, 1.25)  AS a_15_cm,        -- NULL: libre
+       fn_verificar_colision_mueble(h.id, 1.25, 0, 1.25, 0.10,
+         (SELECT id FROM muebles_sugeridos WHERE nombre = 'Silla 01-1')) AS sin_ella  -- NULL
+FROM habitaciones h
+WHERE h.nombre = 'Hotel Estres - Habitacion 01';
+```
+
+</details>
+
+<details>
+<summary>Centro de masa de cada habitacion y desvio respecto al centro de la planta</summary>
+
+```sql
+SELECT h.nombre, c.total_muebles,
+       round(c.centro_x::NUMERIC, 3) AS cx,
+       round(c.centro_z::NUMERIC, 3) AS cz,
+       round(fn_distancia_euclidiana(c.centro_x, 0, c.centro_z,
+                                     h.ancho / 2, 0, h.profundidad / 2)::NUMERIC, 3) AS desvio_m
+FROM habitaciones h
+CROSS JOIN LATERAL fn_calcular_centro_masa_habitacion(h.id) c
+ORDER BY h.id;
+```
+
+En la `Hotel Estres - Habitacion 01` (5 x 5 m, tres muebles en la diagonal) el centro de masa es
+`(2.5, 0, 2.5)`, el centro exacto de la planta: `desvio_m = 0`.
+
+</details>
+
+<details>
+<summary>Purgar a mano la auditoria antigua</summary>
+
+```sql
+SELECT * FROM fn_purgar_logs_auditoria(30);
+--        tabla       | filas_borradas
+-- -------------------+----------------
+--  logs_actividad    |            ...
+--  auditoria_muebles |            ...
+```
+
+</details>
