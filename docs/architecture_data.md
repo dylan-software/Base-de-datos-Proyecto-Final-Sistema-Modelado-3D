@@ -77,3 +77,67 @@ Borrar una habitacion dispara una busqueda en cada tabla hija. En la misma carga
 Pendiente: `historial_ia.habitacion_id` es el caso medido arriba y conviene indexarlo si el panel de IA
 consulta el historial por habitacion. `sesiones.usuario_id` solo se recorre al borrar un usuario, porque
 `fn_validar_sesion` busca por `token_hash`, que ya es `UNIQUE`.
+
+## Troubleshooting de extensiones espaciales
+
+`schema.sql` (Supabase) necesita `postgis` y `vector`; los scripts locales solo necesitan `pgcrypto`
+(`procedures/sp_security.sql`). Primero comprueba que esta disponible y que esta instalado:
+
+```sql
+-- Disponible en el servidor (paquete instalado) y version instalada en esta base
+SELECT name, default_version, installed_version
+FROM pg_available_extensions
+WHERE name IN ('postgis', 'vector', 'pgcrypto');
+
+-- Version completa de PostGIS y de sus librerias (GEOS, PROJ)
+SELECT postgis_full_version();
+```
+
+### `extension "postgis" is not available`
+
+El paquete no esta instalado en el servidor; `CREATE EXTENSION` no lo descarga. Instalalo para la misma
+version mayor de PostgreSQL y vuelve a ejecutar el script:
+
+- Debian/Ubuntu: `sudo apt install postgresql-16-postgis-3 postgresql-16-pgvector`
+- Windows: Application Stack Builder -> Spatial Extensions -> PostGIS
+- Docker: usa la imagen `postgis/postgis:16-3.4` en lugar de `postgres:16`
+- Supabase: **Database -> Extensions** y activa `postgis` y `vector`
+
+### `permission denied to create extension`
+
+Crear `postgis` requiere un superusuario. Ejecuta el `CREATE EXTENSION` con `postgres` una sola vez; el
+usuario de la aplicacion no necesita ese permiso para usar las funciones despues. (`pgcrypto` si es una
+extension *trusted*: la puede crear cualquier rol con permiso `CREATE` sobre la base.)
+
+### `function st_area(geometry) does not exist` despues de restaurar
+
+La extension quedo en un esquema que no esta en el `search_path` (en Supabase se crea en `extensions`):
+
+```sql
+SELECT e.extname, n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace;
+ALTER DATABASE postgres SET search_path = public, extensions;
+```
+
+Reconecta la sesion para que tome el nuevo `search_path`.
+
+### Despues de actualizar PostgreSQL o PostGIS
+
+`pg_upgrade` copia el catalogo pero la extension puede quedar en la version anterior (`installed_version`
+distinta de `default_version` en la consulta de arriba). Actualizala dentro de cada base:
+
+```sql
+SELECT postgis_extensions_upgrade();   -- PostGIS 3.x: actualiza postgis y sus extensiones hermanas
+ALTER EXTENSION vector UPDATE;
+```
+
+### `could not access file "$libdir/postgis-3"`
+
+El catalogo de la base apunta a una libreria que ya no existe en el servidor (por ejemplo, se restauro un
+respaldo en un servidor sin PostGIS, o se desinstalo el paquete). Instala el mismo paquete de la seccion
+anterior; no hace falta recrear la extension ni perder datos.
+
+### Restaurar un respaldo
+
+`pg_dump` guarda `CREATE EXTENSION`, no el codigo de la extension. El servidor destino necesita los
+paquetes instalados antes de `pg_restore`; si no, las columnas `geometry` y `vector` fallan al crearse y
+arrastran a las tablas `spaces` y `furniture`.
