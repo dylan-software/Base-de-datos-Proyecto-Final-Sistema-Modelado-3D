@@ -167,6 +167,46 @@ SELECT mueble_id, old_x, new_x, modificado_por FROM auditoria_muebles;
 -- espera 1 fila: old_x = 2.0, new_x = 2.5, modificado_por = 1
 ```
 
+## Flujo de autenticacion y persistencia
+
+Secuencia desde el inicio de sesion hasta que una coordenada queda auditada:
+
+```
+ Navegador              API Python                         PostgreSQL (modelado_3d)
+    |                       |                                         |
+    | POST /login           |                                         |
+    | (usuario, clave)      |                                         |
+    |---------------------->| SELECT id FROM usuarios                 |
+    |                       |  WHERE password_hash = crypt(clave, ...)|
+    |                       |---------------------------------------->|
+    |                       |<----------------------------------------| id
+    |                       | INSERT INTO sesiones (sha256(token))    |
+    |                       | INSERT INTO logs_actividad ('login')    |
+    |                       |---------------------------------------->|
+    |<----------------------| token                                   |
+    |                       |                                         |
+    | PUT /muebles/:id      |                                         |
+    | Authorization: token  |                                         |
+    |---------------------->| SELECT fn_validar_sesion(token)         |
+    |                       |---------------------------------------->|
+    |                       |<----------------------------------------| usuario_id (o NULL -> 401)
+    |                       | BEGIN                                   |
+    |                       | SET LOCAL app.usuario_id = usuario_id   |
+    |                       | UPDATE muebles_sugeridos SET posicion_* |
+    |                       |---------------------------------------->|
+    |                       |                                         |--+ trg_audit_muebles_cambios
+    |                       |                                         |  | fn_log_mueble_movement()
+    |                       |                                         |<-+ INSERT auditoria_muebles
+    |                       | INSERT INTO logs_actividad              |      (old_*, new_*)
+    |                       |   ('peticion_api')                      |
+    |                       | COMMIT                                  |
+    |                       |---------------------------------------->|
+    |<----------------------| 200 OK                                  |
+```
+
+El `UPDATE`, el registro del trigger y la entrada de `logs_actividad` van en la misma transaccion: o se
+guardan los tres o ninguno.
+
 ## Despliegue y ejecucion de los scripts
 
 Requisitos: PostgreSQL 14+ con el cliente `psql` en el `PATH`. El servidor escucha por defecto en el
