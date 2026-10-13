@@ -2,3 +2,15 @@
 -- Modela usuarios, roles y la relacion de cada habitacion con su dueno.
 
 -- TODO: definiciones de tablas de seguridad.
+
+-- Cuentas de acceso a la aplicacion web. La contrasena nunca se guarda en
+-- claro: password_hash contiene la firma bcrypt generada con
+-- crypt(<clave>, gen_salt('bf')) de pgcrypto.
+CREATE TABLE usuarios (
+  id              SERIAL PRIMARY KEY,
+  nombre_usuario  VARCHAR(50) NOT NULL UNIQUE,
+  email           VARCHAR(255) NOT NULL UNIQUE,
+  password_hash   TEXT NOT NULL,
+  activo          BOOLEAN NOT NULL DEFAULT true,
+  creado_en       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
