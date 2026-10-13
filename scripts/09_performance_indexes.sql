@@ -15,3 +15,21 @@ CREATE INDEX IF NOT EXISTS idx_habitaciones_usuario_creado
   ON habitaciones (usuario_id, creado_en DESC);
 
 DROP INDEX IF EXISTS idx_habitaciones_usuario;
+
+-- Motor de colisiones y raycasting: antes de lanzar el rayo, el visor pide
+-- solo los muebles de la habitacion que caen en la franja del piso que
+-- cruza el rayo (planta X-Z; la altura Y casi nunca descarta muebles).
+--   SELECT ... FROM muebles_sugeridos
+--   WHERE habitacion_id = $1
+--     AND posicion_x BETWEEN $2 AND $3
+--     AND posicion_z BETWEEN $4 AND $5;
+-- habitacion_id va primero por ser igualdad; posicion_x acota el rango en
+-- el arbol y posicion_z se descarta dentro del mismo indice, sin leer la
+-- tabla para las filas que no pasan. Un B-Tree solo usa como limite de
+-- busqueda la primera columna de rango: para rangos 2D sobre tablas muy
+-- grandes conviene GiST sobre un point/box. idx_muebles_habitacion de
+-- 02_indexes.sql es prefijo de este y se elimina.
+CREATE INDEX IF NOT EXISTS idx_muebles_habitacion_xz
+  ON muebles_sugeridos (habitacion_id, posicion_x, posicion_z);
+
+DROP INDEX IF EXISTS idx_muebles_habitacion;
