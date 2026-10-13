@@ -17,6 +17,16 @@ BEGIN
     RETURN NULL;
   END IF;
 
+  -- La aplicacion fija el usuario con SET LOCAL app.usuario_id = '<id>';
+  -- si no lo hace (por ejemplo un UPDATE manual en psql) queda en NULL.
+  INSERT INTO auditoria_muebles
+    (mueble_id, old_x, old_y, old_z, new_x, new_y, new_z, modificado_por)
+  VALUES
+    (NEW.id,
+     OLD.posicion_x, OLD.posicion_y, OLD.posicion_z,
+     NEW.posicion_x, NEW.posicion_y, NEW.posicion_z,
+     NULLIF(current_setting('app.usuario_id', true), '')::INTEGER);
+
   RETURN NULL;
 END;
 $$;
