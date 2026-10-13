@@ -34,3 +34,17 @@ completely, and the backend is unaffected because it connects as the table owner
 (create an L-shaped space, move a vertex, create objects, generate and read back a layout), and the RLS
 behaviour was checked with a restricted role. It was **not** run against a live Supabase project, since that
 requires your account.
+
+---
+
+# Base de datos local — PostgreSQL (`scripts/`)
+
+Esquema relacional independiente del de Supabase para la aplicacion web de modelado 3D. Persiste las
+dimensiones de las habitaciones, las coordenadas (X, Y, Z) de los muebles validados por el Octree y el
+historial de recomendaciones esteticas que devuelve la API de OmniRoute.
+
+| Archivo | Contenido |
+|---|---|
+| `scripts/01_schema.sql` | Crea la base `modelado_3d` y las tablas `habitaciones`, `muebles_sugeridos`, `historial_ia` |
+| `scripts/02_indexes.sql` | Indice sobre la llave foranea `muebles_sugeridos.habitacion_id` |
+| `scripts/03_seed.sql` | Habitacion vacia de 4x4 m con un sofa y un escritorio de prueba |
