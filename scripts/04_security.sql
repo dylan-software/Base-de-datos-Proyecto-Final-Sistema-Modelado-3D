@@ -57,3 +57,14 @@ ALTER TABLE habitaciones
 
 CREATE INDEX idx_habitaciones_usuario
   ON habitaciones (usuario_id);
+
+-- Sesiones abiertas desde el navegador. Se guarda el SHA-256 del token,
+-- no el token: una fuga de esta tabla no permite suplantar sesiones.
+CREATE TABLE sesiones (
+  id          BIGSERIAL PRIMARY KEY,
+  usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  token_hash  CHAR(64) NOT NULL UNIQUE,
+  expira_en   TIMESTAMPTZ NOT NULL,
+  revocada    BOOLEAN NOT NULL DEFAULT false,
+  creado_en   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
