@@ -1,12 +1,12 @@
 -- Tareas de mantenimiento periodicas con pg_cron. Ejecutar despues de
 -- 15_stress_seeds.sql (requiere logs_actividad y auditoria_muebles de
 -- 05_audit_logs.sql).
--- Las funciones se crean siempre; las tareas solo se programan si la
+-- La funcion de purga se crea siempre; su tarea solo se programa si la
 -- extension pg_cron esta instalada. En Supabase se activa desde
 -- Database -> Extensions -> pg_cron; en PostgreSQL local hace falta
 -- shared_preload_libraries = 'pg_cron' en postgresql.conf y reiniciar.
--- Sin pg_cron el script no falla: avisa y las funciones se pueden llamar
--- a mano.
+-- Sin pg_cron el script no falla: avisa y la funcion se puede llamar a
+-- mano.
 --
 -- Las horas de pg_cron son UTC. Como en 12_db_maintenance.sql, se usa la
 -- ventana de 08:00 a 10:00 UTC (03:00 a 05:00 en Colombia), la de menos
@@ -17,7 +17,7 @@
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
-    RAISE NOTICE 'pg_cron no esta instalada: se crean las funciones pero no se programan tareas';
+    RAISE NOTICE 'pg_cron no esta instalada: se crea la funcion pero no se programa su tarea';
   END IF;
 END;
 $$;

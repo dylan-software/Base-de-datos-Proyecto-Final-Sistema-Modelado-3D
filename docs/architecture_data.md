@@ -23,6 +23,13 @@ con las extensiones del esquema de Supabase (`schema.sql`).
 | 13 | `scripts/10_analytical_views.sql` | Vistas de inventario y densidad de mobiliario |
 | 14 | `scripts/procedures/sp_maintenance.sql` | `fn_purgar_habitaciones_vacias` |
 | 15 | `scripts/11_supabase_policies.sql` | Politicas RLS (solo Supabase) |
+| 16 | `scripts/12_db_maintenance.sql` | `sp_ejecutar_vacuum_analitico` y `fn_reindexar_tablas_espaciales` |
+| 17 | `scripts/13_partitioning.sql` | `historial_ia` particionada por ano |
+| 18 | `scripts/procedures/sp_backups.sql` | `log_respaldos` y respaldo JSON de habitaciones |
+| 19 | `scripts/14_spatial_collisions.sql` | `fn_verificar_colision_mueble` y trigger `trg_impedir_superposicion` |
+| 20 | `scripts/procedures/sp_vector_math.sql` | `fn_calcular_centro_masa_habitacion` |
+| 21 | `scripts/15_stress_seeds.sql` | Hotel de estres: 20 habitaciones y 50 muebles |
+| 22 | `scripts/16_cron_jobs.sql` | `fn_purgar_logs_auditoria` y su tarea de pg_cron |
 
 Cada script depende de los anteriores; ejecutarlos en otro orden falla con "relation does not exist".
 
