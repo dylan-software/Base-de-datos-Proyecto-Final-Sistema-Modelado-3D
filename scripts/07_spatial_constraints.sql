@@ -65,3 +65,13 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+-- BEFORE para rechazar la fila antes de escribirla. UPDATE OF limita el
+-- disparo a las columnas que cambian la caja del mueble o su habitacion;
+-- renombrar un mueble no vuelve a validar limites.
+CREATE TRIGGER trg_muebles_limites_check
+  BEFORE INSERT OR UPDATE OF habitacion_id, posicion_x, posicion_y, posicion_z,
+                             ancho, alto, profundidad
+  ON muebles_sugeridos
+  FOR EACH ROW
+  EXECUTE FUNCTION fn_check_boundaries();
