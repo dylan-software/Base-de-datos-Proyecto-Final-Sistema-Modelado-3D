@@ -1,0 +1,5 @@
+-- Rutinas de mantenimiento de tablas. Ejecutar despues de
+-- 10_analytical_views.sql.
+-- Pensadas para correr fuera del flujo de la aplicacion: a mano desde el
+-- SQL Editor o programadas con pg_cron (en Supabase: Database ->
+-- Extensions -> pg_cron).
