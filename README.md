@@ -46,7 +46,7 @@ historial de recomendaciones esteticas que devuelve la API de OmniRoute.
 | Archivo | Contenido |
 |---|---|
 | `scripts/01_schema.sql` | Crea la base `modelado_3d` y las tablas `habitaciones`, `muebles_sugeridos`, `historial_ia` |
-| `scripts/02_indexes.sql` | Indice sobre la llave foranea `muebles_sugeridos.habitacion_id` |
+| `scripts/02_indexes.sql` | Indice sobre la llave foranea `muebles_sugeridos.habitacion_id` (reemplazado en `09_performance_indexes.sql`) |
 | `scripts/03_seed.sql` | Habitacion vacia de 4x4 m con un sofa y un escritorio de prueba |
 | `scripts/04_security.sql` | Tablas `usuarios`, `roles`, `usuario_roles`, `sesiones` y la llave foranea `habitaciones.usuario_id` |
 | `scripts/05_audit_logs.sql` | Tablas `logs_actividad` y `auditoria_muebles` |

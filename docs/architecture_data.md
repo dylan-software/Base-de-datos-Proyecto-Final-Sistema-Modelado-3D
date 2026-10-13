@@ -19,6 +19,10 @@ con las extensiones del esquema de Supabase (`schema.sql`).
 | 9 | `scripts/07_spatial_constraints.sql` | Medidas de los muebles y trigger de limites |
 | 10 | `scripts/procedures/sp_room_analytics.sql` | Funciones de volumen |
 | 11 | `scripts/08_extended_seeds.sql` | Oficina, dormitorio y sala de prueba |
+| 12 | `scripts/09_performance_indexes.sql` | Indices compuestos; reemplaza `idx_muebles_habitacion` e `idx_habitaciones_usuario` |
+| 13 | `scripts/10_analytical_views.sql` | Vistas de inventario y densidad de mobiliario |
+| 14 | `scripts/procedures/sp_maintenance.sql` | `fn_purgar_habitaciones_vacias` |
+| 15 | `scripts/11_supabase_policies.sql` | Politicas RLS (solo Supabase) |
 
 Cada script depende de los anteriores; ejecutarlos en otro orden falla con "relation does not exist".
 
@@ -65,8 +69,8 @@ Borrar una habitacion dispara una busqueda en cada tabla hija. En la misma carga
 
 | Llave foranea | Indice |
 |---|---|
-| `muebles_sugeridos.habitacion_id` | `idx_muebles_habitacion` |
-| `habitaciones.usuario_id` | `idx_habitaciones_usuario` |
+| `muebles_sugeridos.habitacion_id` | `idx_muebles_habitacion_xz (habitacion_id, posicion_x, posicion_z)` |
+| `habitaciones.usuario_id` | `idx_habitaciones_usuario_creado (usuario_id, creado_en DESC)` |
 | `logs_actividad.usuario_id` | `idx_logs_actividad_usuario (usuario_id, creado_en)` |
 | `auditoria_muebles.mueble_id` | `idx_auditoria_muebles_mueble (mueble_id, modificado_en)` |
 | `usuario_roles.usuario_id` | Cubierto por la llave primaria `(usuario_id, rol_id)` |
@@ -77,6 +81,10 @@ Borrar una habitacion dispara una busqueda en cada tabla hija. En la misma carga
 Pendiente: `historial_ia.habitacion_id` es el caso medido arriba y conviene indexarlo si el panel de IA
 consulta el historial por habitacion. `sesiones.usuario_id` solo se recorre al borrar un usuario, porque
 `fn_validar_sesion` busca por `token_hash`, que ya es `UNIQUE`.
+
+Desde `09_performance_indexes.sql` las dos primeras llaves usan indices compuestos que empiezan por la llave
+foranea, asi que las mediciones de arriba siguen valiendo. Los planes de esos indices estan en
+`docs/performance_tuning.md`.
 
 ## Troubleshooting de extensiones espaciales
 
