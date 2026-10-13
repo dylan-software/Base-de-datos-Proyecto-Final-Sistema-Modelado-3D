@@ -80,3 +80,70 @@ SELECT h.nombre, c.*,
 FROM habitaciones h
 CROSS JOIN LATERAL fn_calcular_centro_masa_habitacion(h.id) c;
 ```
+
+## Integracion con el Octree del backend
+
+El backend y la base de datos validan cosas distintas, en momentos distintos. Ninguna de las dos capas
+reemplaza a la otra.
+
+| | Octree del backend | `trg_impedir_superposicion` en la base |
+|---|---|---|
+| Que compara | Las cajas completas de los muebles (interseccion de volumenes) | Solo los puntos de posicion (distancia menor que `r`) |
+| Cuando corre | Al proponer o mover un mueble, antes de llamar a la base | En cada `INSERT` sobre `muebles_sugeridos`, venga de donde venga |
+| Que protege | Que el layout sea fisicamente posible | Que no se guarden dos muebles en el mismo punto aunque el backend falle |
+| Costo | En memoria, `O(log n)` por consulta al arbol | Un rango sobre `idx_muebles_habitacion_xz` mas `n_cercanos` distancias |
+
+El flujo de una insercion es:
+
+1. El Octree del backend comprueba que la caja del mueble no se cruce con las de los demas.
+2. El backend hace el `INSERT` con las coordenadas aprobadas.
+3. `trg_impedir_superposicion` toma el bloqueo consultivo de la habitacion y llama a
+   `fn_verificar_colision_mueble`. Si hay un mueble a menos de `r` aborta con `exclusion_violation` (23P01).
+4. `trg_muebles_limites_check` (orden alfabetico, corre despues) comprueba que la caja quepa en la habitacion;
+   si no, aborta con `check_violation` (23514).
+
+Si el Octree funciona bien, el paso 3 casi nunca falla: dos cajas que no se cruzan tienen sus centros separados
+al menos por la suma de sus medias medidas en algun eje, que para muebles reales supera con creces 10 cm (la
+excepcion son objetos de pocos centimetros o sin medidas). El trigger existe para los casos que el Octree no ve:
+
+- **Peticiones repetidas.** Un doble clic o un reintento de red envia el mismo mueble dos veces. El Octree de
+  cada peticion se construyo antes de que la otra se guardara y las dos lo aprueban.
+- **Escrituras concurrentes.** Dos pestanas del mismo usuario colocan un mueble en el mismo sitio a la vez. El
+  bloqueo `pg_advisory_xact_lock(14, habitacion_id)` hace que la segunda insercion espere a que la primera
+  confirme y entonces la vea.
+- **Inserciones que no pasan por el backend**, como un `INSERT` manual en el SQL Editor de Supabase o un script
+  de carga.
+
+### Que debe hacer el backend con los errores
+
+| SQLSTATE | Origen | Respuesta HTTP sugerida |
+|---|---|---|
+| `23P01` `exclusion_violation` | `trg_impedir_superposicion` | `409 Conflict`: el sitio ya esta ocupado; volver a consultar el Octree con los datos actuales |
+| `23514` `check_violation` | `trg_muebles_limites_check` | `422 Unprocessable Entity`: el mueble no cabe en la habitacion |
+
+El mensaje del error nombra el mueble con el que choca y su id, y el `DETAIL` trae las dos posiciones y la
+distancia, por si el backend quiere mostrarlos.
+
+### Ajustar el radio
+
+El radio vive en la definicion del trigger, como argumento de `fn_impedir_superposicion`. Para cambiarlo a 5 cm:
+
+```sql
+DROP TRIGGER trg_impedir_superposicion ON muebles_sugeridos;
+CREATE TRIGGER trg_impedir_superposicion
+  BEFORE INSERT ON muebles_sugeridos
+  FOR EACH ROW EXECUTE FUNCTION fn_impedir_superposicion('0.05');
+```
+
+Debe ser menor que la menor separacion legitima entre dos posiciones que acepte el Octree.
+
+### Limites conocidos
+
+- **Muebles apilados en el mismo punto.** `08_extended_seeds.sql` coloca la "Mesa de centro" y la "Alfombra" en
+  exactamente la misma posicion: una alfombra bajo una mesa es un layout valido, pero el trigger lo rechazaria.
+  Ese script corre antes de `14_spatial_collisions.sql`, asi que no falla; volver a ejecutarlo despues si
+  fallaria. Para soportar objetos apilados habria que excluir del chequeo los muebles muy bajos (por ejemplo
+  `alto < 0.05`).
+- **Solo `INSERT`.** Mover un mueble con `UPDATE` no pasa por el trigger. Si hace falta, se puede agregar
+  `OR UPDATE OF habitacion_id, posicion_x, posicion_y, posicion_z` y pasar `NEW.id` como `p_excluir_id`.
+- **Muebles anteriores al script.** Las filas que ya existian cuando se aplico el trigger no se revisan.
