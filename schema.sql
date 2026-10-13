@@ -27,3 +27,6 @@ CREATE TABLE IF NOT EXISTS categorias (
   id      SERIAL PRIMARY KEY,
   nombre  VARCHAR(60) NOT NULL
 );
+
+-- "Asientos" and "asientos" are the same category.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_categorias_nombre_lower ON categorias (lower(nombre));
