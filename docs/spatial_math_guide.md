@@ -23,6 +23,59 @@ Es la misma de Three.js en el frontend y de `07_spatial_constraints.sql`:
 - El origen `(0, 0, 0)` es la esquina de la habitacion en el piso, junto a la pared del fondo.
 - La posicion de un mueble es el **centro de su base**: centrado en X y Z, apoyado sobre Y.
 
+### Diagrama del modelo espacial
+
+Caja de limites de una habitacion de `ancho x alto x profundidad` y el vector posicion de un mueble:
+
+```
+                 Y (alto)
+                 |
+                 +---------------------------+
+                /|                          /|
+               / |                         / |  alto
+              +---------------------------+  |
+              |  |                        |  |
+              |  |      p = (x, y, z)     |  |
+              |  |         _.-[M]         |  |
+              |  |     _.-'   |           |  |
+              |  O---'--------|-----------|--+------ X (ancho)
+              | /        y = 0 (piso)     | /
+              |/                          |/  profundidad
+              +---------------------------+
+             /
+            Z (profundidad)
+
+  O = (0, 0, 0)   esquina del piso junto a la pared del fondo
+  [M]             centro de la base del mueble: 0 <= x <= ancho,
+                  0 <= y <= alto, 0 <= z <= profundidad
+```
+
+Vista en planta (plano X-Z, desde arriba) con tres muebles, su centro de masa `c` y el radio de colision `r`
+alrededor de uno de ellos:
+
+```
+  O------------------------------------------------> X
+  |                                       ancho
+  |    +--------+
+  |    |   A    |  p_A = (1.0, 0, 0.5)
+  |    +--------+
+  |          \
+  |           \              .---.
+  |            \            /  r  \     r = 0.10 m
+  |             '---- c    |  [B]  |    p_B = (3.0, 0, 1.5)
+  |                         \     /
+  |                          '---'      Un mueble nuevo con su
+  |          +-----+                    posicion dentro del circulo
+  |          |  C  |  p_C = (2.0, 0, 2.5)   choca con B y se rechaza
+  |          +-----+
+  |                         c = (p_A + p_B + p_C) / 3 = (2.0, 0, 1.5)
+  v
+  Z  profundidad
+```
+
+El circulo es el corte en el piso de una esfera: el chequeo usa la distancia en los tres ejes, asi que un
+estante colgado 1.5 m por encima de B no choca con el.
+
 ## Vector posicion
 
 Cada mueble se trata como un vector `p = (x, y, z)` que va del origen de su habitacion al centro de su base.
