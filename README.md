@@ -48,3 +48,34 @@ historial de recomendaciones esteticas que devuelve la API de OmniRoute.
 | `scripts/01_schema.sql` | Crea la base `modelado_3d` y las tablas `habitaciones`, `muebles_sugeridos`, `historial_ia` |
 | `scripts/02_indexes.sql` | Indice sobre la llave foranea `muebles_sugeridos.habitacion_id` |
 | `scripts/03_seed.sql` | Habitacion vacia de 4x4 m con un sofa y un escritorio de prueba |
+
+## Diagrama entidad-relacion
+
+```
++--------------------------+          +------------------------------+
+|       habitaciones       |          |      muebles_sugeridos       |
++--------------------------+          +------------------------------+
+| PK id           SERIAL   |1        N| PK id            SERIAL      |
+|    nombre       VARCHAR  |----------| FK habitacion_id INTEGER     |
+|    alto         FLOAT    |          |    nombre        VARCHAR     |
+|    ancho        FLOAT    |          |    posicion_x    FLOAT       |
+|    profundidad  FLOAT    |          |    posicion_y    FLOAT       |
+|    creado_en    TIMESTAMPTZ         |    posicion_z    FLOAT       |
++--------------------------+          |    creado_en     TIMESTAMPTZ |
+             |1                       +------------------------------+
+             |
+             |N
++--------------------------+
+|       historial_ia       |
++--------------------------+
+| PK id           SERIAL   |
+| FK habitacion_id INTEGER |
+|    recomendacion TEXT    |
+|    creado_en    TIMESTAMPTZ
++--------------------------+
+```
+
+- Una habitacion tiene **muchos** muebles; cada mueble pertenece a **una sola** habitacion
+  (`fk_muebles_habitacion`). Las coordenadas son metros relativos a la esquina origen de la habitacion.
+- Una habitacion tiene **muchas** recomendaciones de OmniRoute en `historial_ia`.
+- Ambas llaves foraneas usan `ON DELETE CASCADE`: al borrar una habitacion se borran sus muebles e historial.
