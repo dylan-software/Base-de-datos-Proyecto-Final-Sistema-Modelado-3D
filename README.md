@@ -62,6 +62,8 @@ historial de recomendaciones esteticas que devuelve la API de OmniRoute.
 | `scripts/11_supabase_policies.sql` | Columna `usuarios.auth_id` y politicas RLS de `habitaciones` y `muebles_sugeridos` (solo Supabase) |
 | `docs/architecture_data.md` | Indices, planes de ejecucion medidos y troubleshooting de extensiones |
 | `docs/performance_tuning.md` | Planes `EXPLAIN ANALYZE` de los indices compuestos y de las politicas RLS |
+| `scripts/qa_tests/` | Suite de pruebas SQL (8 pruebas y el orquestador `run_qa_suite.sql`) |
+| `docs/qa_strategy.md` | Convenciones de las pruebas, matrices de cobertura y flujo de una lectura con RLS |
 
 ## Diagrama entidad-relacion
 
@@ -414,3 +416,52 @@ psql -d modelado_3d -f scripts/10_analytical_views.sql
 psql -d modelado_3d -f scripts/procedures/sp_maintenance.sql
 psql -d modelado_3d -f scripts/11_supabase_policies.sql      # solo en Supabase
 ```
+
+## Suite de QA (`scripts/qa_tests/`)
+
+Pruebas automatizadas de las reglas que viven en la base: llaves foraneas, triggers, funciones, indices y
+politicas RLS. Cada prueba crea sus propios datos (prefijo `QA`) dentro de una transaccion que termina en
+`ROLLBACK`, asi que se puede correr sobre una base con datos reales sin modificarlos. Requiere que la base ya
+tenga aplicados todos los scripts anteriores.
+
+| Prueba | Verifica | Donde corre |
+|---|---|---|
+| `test_funcion_distancia_euclidiana.sql` | d((1,1,1), (4,5,1)) = 5 y propiedades de `fn_distancia_euclidiana` | Local y Supabase |
+| `test_insert_coordenadas_validas.sql` | Insercion de un mueble en el origen (0, 0, 0) | Local y Supabase |
+| `test_error_usuario_inexistente.sql` | Rechazo por llave foranea de usuarios y habitaciones inexistentes | Local y Supabase |
+| `test_limite_volumen_maximo.sql` | Trigger de limites en una nave de 120 x 15 x 80 m | Local y Supabase |
+| `test_movimiento_coordenada_old_new.sql` | Auditoria `old_*`/`new_*` al mover un mueble | Local y Supabase |
+| `test_limpieza_espacios_vicios.sql` | `fn_purgar_habitaciones_vacias` y su `historial_ia` | Local y Supabase |
+| `test_indice_performance_query.sql` | `EXPLAIN` usa los indices B-Tree compuestos | Local y Supabase |
+| `test_rls_security_auth.sql` | `anon` y un JWT sin cuenta no leen ni escriben filas | Solo Supabase |
+
+### Desde la consola de Supabase (SQL Editor)
+
+1. Abre **SQL Editor -> New query**.
+2. Pega el contenido completo de una prueba, por ejemplo `scripts/qa_tests/test_rls_security_auth.sql`, y
+   pulsa **Run**. Pega siempre el archivo completo: el `ROLLBACK` final es el que descarta los datos de
+   prueba (en `test_limpieza_espacios_vicios.sql` tambien deshace la purga de las habitaciones reales).
+3. Revisa la salida: cada caso superado imprime `OK ...` y la prueba termina con
+   `OK <nombre>: todas las aserciones superadas`. Si algo falla, el editor muestra el error del `ASSERT`
+   con el valor esperado y el obtenido, por ejemplo `ERROR: anon ve 3 habitaciones; se esperaban 0`.
+4. Repite con las demas pruebas. El orden no importa.
+
+`run_qa_suite.sql` no funciona en el SQL Editor porque usa meta-comandos de `psql` (`\ir`, `\if`).
+
+### Con `psql` (local o contra Supabase)
+
+El orquestador corre las 8 pruebas en orden y se detiene en la primera que falla. Detecta si la base es
+Supabase (existe el esquema `auth`) y, si no lo es, omite la prueba RLS.
+
+```bash
+# PostgreSQL local
+psql -d modelado_3d -f scripts/qa_tests/run_qa_suite.sql
+
+# Supabase: la cadena del Session pooler (ver la seccion de Supabase al inicio)
+psql "postgres://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres" \
+     -f scripts/qa_tests/run_qa_suite.sql
+```
+
+Termina con `== Suite de QA completada sin fallos ==`. Si una prueba falla, `psql` sale con codigo 3, lo que
+permite usar el orquestador en un pipeline de CI. Las convenciones de las pruebas, las matrices de cobertura y
+la forma en que se valido la suite estan en `docs/qa_strategy.md`.
