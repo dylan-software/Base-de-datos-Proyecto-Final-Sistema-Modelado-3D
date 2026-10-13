@@ -13,3 +13,15 @@ CREATE TABLE habitaciones (
   profundidad  FLOAT NOT NULL CHECK (profundidad > 0),
   creado_en    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Muebles sugeridos y validados por el Octree. Posicion cartesiana en
+-- metros relativa al origen de la habitacion.
+CREATE TABLE muebles_sugeridos (
+  id             SERIAL PRIMARY KEY,
+  habitacion_id  INTEGER NOT NULL,
+  nombre         VARCHAR(100) NOT NULL,
+  posicion_x     FLOAT NOT NULL,
+  posicion_y     FLOAT NOT NULL,
+  posicion_z     FLOAT NOT NULL,
+  creado_en      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
