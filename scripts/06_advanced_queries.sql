@@ -1,8 +1,6 @@
 -- Consultas analiticas de optimizacion espacial. Ejecutar al final, despues
 -- de procedures/sp_triggers.sql.
 
--- TODO: funciones matematicas.
-
 -- Distancia euclidiana entre dos puntos 3D (en metros):
 --   d = sqrt((x2 - x1)^2 + (y2 - y1)^2 + (z2 - z1)^2)
 -- IMMUTABLE porque solo depende de sus argumentos; permite usarla en
