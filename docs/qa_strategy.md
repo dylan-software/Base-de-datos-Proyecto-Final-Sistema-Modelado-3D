@@ -86,6 +86,59 @@ pasan por el backend, que se conecta como dueno de las tablas y no es filtrado p
 consulta. Por eso las pruebas crean antes un fixture como dueno; sin el, "0 filas" no distinguiria un bloqueo
 de una tabla vacia.
 
+## Ciclo de vida de una lectura: de Vercel a la politica RLS
+
+El frontend publicado en Vercel lee las tablas directamente con `fetch` a la API REST de Supabase. Este es el
+camino que sigue esa peticion y el punto donde `test_rls_security_auth.sql` la intercepta:
+
+```
+ Navegador (frontend en Vercel)       Supabase API (PostgREST)              PostgreSQL
+        |                                     |                                   |
+        | fetch GET /rest/v1/habitaciones     |                                   |
+        |   apikey: <anon key>                |                                   |
+        |   Authorization: Bearer <JWT>       |                                   |
+        |   (sin sesion: solo la anon key)    |                                   |
+        |------------------------------------>|                                   |
+        |                                     | 1. Verifica la firma del JWT      |
+        |                                     |    (firma invalida -> 401, la     |
+        |                                     |     peticion no llega a la base)  |
+        |                                     |                                   |
+        |                                     | 2. BEGIN                          |
+        |                                     |    SET LOCAL ROLE <claim "role">  |
+        |                                     |      anon | authenticated         |
+        |                                     |    set_config('request.jwt.claims',
+        |                                     |               <claims>, true)     |
+        |                                     |---------------------------------->|
+        |                                     |                                   |
+        |                                     | 3. SELECT * FROM habitaciones     |
+        |                                     |---------------------------------->|
+        |                                     |                                   |--+ RLS activo en la tabla
+        |                                     |                                   |  | anon: sin politica
+        |                                     |                                   |  |   -> 0 filas
+        |                                     |                                   |  | authenticated:
+        |                                     |                                   |  |   pol_habitaciones_select_propias
+        |                                     |                                   |  |   auth.uid() = claims.sub
+        |                                     |                                   |  |   -> usuarios.auth_id -> usuarios.id
+        |                                     |                                   |  |   -> usuario_id = <id> (indice)
+        |                                     |                                   |<-+
+        |                                     |<----------------------------------| filas visibles (o ninguna)
+        |                                     | 4. COMMIT                         |
+        |<------------------------------------| 200 OK  [ ... ]  (lista vacia,    |
+        |                                     |  no 403, si no hay permiso)       |
+        |                                     |                                   |
+        :                                     :                                   :
+        :   La prueba reproduce los pasos 2 y 3 desde el SQL Editor:              :
+        :     SET LOCAL ROLE anon;  set_config('request.jwt.claims', ...);        :
+        :     SELECT count(*) ...;  ASSERT ... = 0;                               :
+```
+
+- El paso 1 lo resuelve Supabase y no se puede probar desde SQL; las pruebas empiezan en el paso 2, que es
+  exactamente lo que PostgREST ejecuta dentro de la base.
+- Una peticion sin sesion no recibe un error sino una lista vacia. Por eso el frontend no debe interpretar
+  `[]` como "el usuario no tiene habitaciones" sin comprobar antes que hay sesion.
+- Las escrituras no siguen este camino: van al backend, que valida el token con `fn_validar_sesion` y se
+  conecta como dueno de las tablas (ver el diagrama de autenticacion del `README.md`).
+
 ## Como se valido la suite
 
 - La suite completa se ejecuto sobre PostgreSQL 17.5 (PGlite) despues de aplicar todos los scripts de
