@@ -5,8 +5,8 @@
 -- la esquina origen de su habitacion, en metros, con la convencion de
 -- 07_spatial_constraints.sql: X -> ancho, Y -> alto, Z -> profundidad.
 -- Las operaciones se hacen componente a componente con agregados de SQL
--- (AVG, SUM, ...), sin extensiones: funciona igual en PostgreSQL local y
--- en Supabase.
+-- (avg por cada eje), sin extensiones: funciona igual en PostgreSQL local
+-- y en Supabase.
 
 -- Centro de masa del mobiliario de una habitacion: el promedio de los
 -- vectores posicion de sus n muebles,
