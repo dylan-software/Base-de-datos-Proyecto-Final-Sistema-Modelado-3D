@@ -40,3 +40,5 @@ CREATE TABLE IF NOT EXISTS muebles_catalogo (
   alto          FLOAT NOT NULL,
   profundidad   FLOAT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS ix_muebles_catalogo_categoria_id ON muebles_catalogo (categoria_id);
