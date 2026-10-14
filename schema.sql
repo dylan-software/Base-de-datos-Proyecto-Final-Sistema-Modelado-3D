@@ -58,3 +58,6 @@ CREATE TABLE IF NOT EXISTS habitaciones (
   alto         FLOAT NOT NULL,
   profundidad  FLOAT NOT NULL
 );
+
+-- Owning account, added the same way as muebles_catalogo.user_id.
+ALTER TABLE habitaciones ADD COLUMN IF NOT EXISTS user_id VARCHAR(64);
