@@ -81,3 +81,13 @@ CREATE TABLE IF NOT EXISTS muebles_sugeridos (
 );
 
 CREATE INDEX IF NOT EXISTS ix_muebles_sugeridos_habitacion_id ON muebles_sugeridos (habitacion_id);
+
+-- ---------------------------------------------------------------------------------------------
+-- Row Level Security. Supabase exposes every table in "public" through its auto-generated REST API.
+-- This app never uses that API: only the backend talks to the database, connected as the owner of
+-- the tables, and owners bypass RLS. RLS with NO policies therefore closes the REST API completely
+-- for the anon and authenticated roles while leaving the backend unaffected. Re-running is a no-op.
+-- ---------------------------------------------------------------------------------------------
+
+-- Most sensitive table: emails and password hashes.
+ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
