@@ -63,3 +63,6 @@ CREATE TABLE IF NOT EXISTS habitaciones (
 ALTER TABLE habitaciones ADD COLUMN IF NOT EXISTS user_id VARCHAR(64);
 
 CREATE INDEX IF NOT EXISTS ix_habitaciones_user_id ON habitaciones (user_id);
+
+-- Irregular, editable floor polygon. NULL for rooms created by /analyze, which are rectangles.
+ALTER TABLE habitaciones ADD COLUMN IF NOT EXISTS vertices JSONB;
