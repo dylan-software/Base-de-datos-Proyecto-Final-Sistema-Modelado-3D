@@ -42,3 +42,7 @@ CREATE TABLE IF NOT EXISTS muebles_catalogo (
 );
 
 CREATE INDEX IF NOT EXISTS ix_muebles_catalogo_categoria_id ON muebles_catalogo (categoria_id);
+
+-- Owning account (the token's "sub"). A separate ALTER so databases created before the column
+-- existed get it too; on a fresh database it simply adds it.
+ALTER TABLE muebles_catalogo ADD COLUMN IF NOT EXISTS user_id VARCHAR(64);
