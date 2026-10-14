@@ -31,6 +31,34 @@ CREATE INDEX idx_log_respaldos_habitacion
 -- bitacora; el dueno de las tablas no es filtrado.
 ALTER TABLE log_respaldos ENABLE ROW LEVEL SECURITY;
 
+-- Registra una copia terminada en log_respaldos y devuelve el id del
+-- registro. La llama fn_generar_backup_json_habitacion como ultimo paso,
+-- asi que solo se escribe cuando la exportacion termino bien; y como corre
+-- en la misma transaccion, si quien la llamo hace ROLLBACK el registro
+-- tambien se descarta.
+CREATE OR REPLACE FUNCTION fn_registrar_respaldo(
+  p_habitacion_id  INTEGER,
+  p_contenido      TEXT
+)
+RETURNS BIGINT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_id  BIGINT;
+BEGIN
+  INSERT INTO log_respaldos
+    (habitacion_id, total_muebles, tamano_bytes, checksum_md5)
+  VALUES
+    (p_habitacion_id,
+     jsonb_array_length(p_contenido::JSONB -> 'muebles'),
+     octet_length(p_contenido),
+     md5(p_contenido))
+  RETURNING id INTO v_id;
+
+  RETURN v_id;
+END;
+$$;
+
 -- Empaqueta una habitacion y todos sus muebles en un texto JSON:
 --   {"version": 1, "exportado_en": ..., "habitacion": {...},
 --    "muebles": [{...}, ...]}
@@ -68,6 +96,8 @@ BEGIN
       USING ERRCODE = 'no_data_found';
   END IF;
 
+  PERFORM fn_registrar_respaldo(p_habitacion_id, v_respaldo);
+
   RETURN v_respaldo;
 END;
 $$;
@@ -77,11 +107,13 @@ $$;
 -- sp_maintenance.sql, se revoca EXECUTE a PUBLIC y a los roles de la API de
 -- Supabase cuando existen, para que no quede publicado como RPC.
 REVOKE EXECUTE ON FUNCTION fn_generar_backup_json_habitacion(INTEGER) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION fn_registrar_respaldo(INTEGER, TEXT) FROM PUBLIC;
 
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
     REVOKE EXECUTE ON FUNCTION fn_generar_backup_json_habitacion(INTEGER) FROM anon, authenticated;
+    REVOKE EXECUTE ON FUNCTION fn_registrar_respaldo(INTEGER, TEXT) FROM anon, authenticated;
   END IF;
 END;
 $$;
