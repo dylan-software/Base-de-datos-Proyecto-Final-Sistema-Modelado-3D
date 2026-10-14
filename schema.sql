@@ -49,3 +49,12 @@ ALTER TABLE muebles_catalogo ADD COLUMN IF NOT EXISTS user_id VARCHAR(64);
 
 -- Every catalog query filters by the owning account.
 CREATE INDEX IF NOT EXISTS ix_muebles_catalogo_user_id ON muebles_catalogo (user_id);
+
+-- Rooms. ancho/profundidad are the floor's extent along x/z and alto the ceiling height.
+CREATE TABLE IF NOT EXISTS habitaciones (
+  id           SERIAL PRIMARY KEY,
+  nombre       VARCHAR(120) NOT NULL,
+  ancho        FLOAT NOT NULL,
+  alto         FLOAT NOT NULL,
+  profundidad  FLOAT NOT NULL
+);
