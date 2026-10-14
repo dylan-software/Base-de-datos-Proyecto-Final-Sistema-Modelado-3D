@@ -1,0 +1,18 @@
+-- Control de colisiones entre muebles. Ejecutar despues de
+-- procedures/sp_backups.sql (requiere fn_distancia_euclidiana de
+-- 06_advanced_queries.sql y el indice idx_muebles_habitacion_xz de
+-- 09_performance_indexes.sql).
+-- Impide que dos muebles de la misma habitacion queden con su posicion en
+-- el mismo punto, o a menos de un radio de tolerancia el uno del otro.
+--
+-- Convencion de ejes (la misma de 07_spatial_constraints.sql):
+--   X -> ancho, Y -> alto (desde el piso), Z -> profundidad.
+-- La posicion de un mueble es el centro de su base, en metros.
+--
+-- La validacion es por proximidad de puntos, no por interseccion de cajas:
+-- dos muebles chocan cuando la distancia euclidiana entre sus posiciones es
+-- menor que el radio,
+--   d = sqrt((x2 - x1)^2 + (y2 - y1)^2 + (z2 - z1)^2) < radio
+-- El Octree del backend ya separa las cajas completas antes de guardar; la
+-- base de datos es la ultima barrera contra dos muebles duplicados en las
+-- mismas coordenadas (por ejemplo una peticion repetida o un INSERT manual).
