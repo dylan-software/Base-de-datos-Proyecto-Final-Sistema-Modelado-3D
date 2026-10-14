@@ -79,3 +79,5 @@ CREATE TABLE IF NOT EXISTS muebles_sugeridos (
   posicion_y     FLOAT NOT NULL,
   posicion_z     FLOAT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS ix_muebles_sugeridos_habitacion_id ON muebles_sugeridos (habitacion_id);
