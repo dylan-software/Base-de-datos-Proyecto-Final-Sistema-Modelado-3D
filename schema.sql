@@ -61,3 +61,5 @@ CREATE TABLE IF NOT EXISTS habitaciones (
 
 -- Owning account, added the same way as muebles_catalogo.user_id.
 ALTER TABLE habitaciones ADD COLUMN IF NOT EXISTS user_id VARCHAR(64);
+
+CREATE INDEX IF NOT EXISTS ix_habitaciones_user_id ON habitaciones (user_id);
