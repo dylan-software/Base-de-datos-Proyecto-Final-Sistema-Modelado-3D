@@ -26,22 +26,12 @@ DECLARE
   v_mueble_id      INTEGER;
   v_caso           RECORD;
 BEGIN
-  -- Caso 1: bloque que llena el 100 % del volumen.
-  INSERT INTO muebles_sugeridos
-    (habitacion_id, nombre, posicion_x, posicion_y, posicion_z, ancho, alto, profundidad)
-  VALUES (v_habitacion_id, 'QA bloque total', 60.0, 0.0, 40.0, 120.0, 15.0, 80.0)
-  RETURNING id INTO v_mueble_id;
-  RAISE NOTICE 'OK bloque de 120 x 15 x 80 m aceptado con id %', v_mueble_id;
-
-  ASSERT fn_calcular_volumen_util(v_habitacion_id) = 144000,
-         format('volumen util %s; se esperaba 144000', fn_calcular_volumen_util(v_habitacion_id));
-  ASSERT fn_calcular_volumen_mobiliario(v_habitacion_id) = 144000,
-         format('volumen mobiliario %s; se esperaba 144000',
-                fn_calcular_volumen_mobiliario(v_habitacion_id));
-  RAISE NOTICE 'OK ocupacion volumetrica del 100 %%';
-
-  -- Casos 2 a 4: el mismo bloque 1 cm mas grande en un solo eje. Cada uno
-  -- debe fallar con check_violation y nombrar el eje que se excede.
+  -- Casos 1 a 3: el bloque de la nave 1 cm mas grande en un solo eje. Cada
+  -- uno debe fallar con check_violation y nombrar el eje que se excede.
+  -- Van antes del bloque valido porque ocupan su mismo centro (60, 0, 40):
+  -- con el bloque ya guardado, trg_impedir_superposicion
+  -- (14_spatial_collisions.sql) los rechazaria por colision antes de
+  -- revisar los limites.
   FOR v_caso IN
     SELECT *
     FROM (VALUES
@@ -63,6 +53,20 @@ BEGIN
         RAISE NOTICE 'OK exceso de 1 cm en % rechazado', v_caso.eje;
     END;
   END LOOP;
+
+  -- Caso 4: bloque que llena el 100 % del volumen.
+  INSERT INTO muebles_sugeridos
+    (habitacion_id, nombre, posicion_x, posicion_y, posicion_z, ancho, alto, profundidad)
+  VALUES (v_habitacion_id, 'QA bloque total', 60.0, 0.0, 40.0, 120.0, 15.0, 80.0)
+  RETURNING id INTO v_mueble_id;
+  RAISE NOTICE 'OK bloque de 120 x 15 x 80 m aceptado con id %', v_mueble_id;
+
+  ASSERT fn_calcular_volumen_util(v_habitacion_id) = 144000,
+         format('volumen util %s; se esperaba 144000', fn_calcular_volumen_util(v_habitacion_id));
+  ASSERT fn_calcular_volumen_mobiliario(v_habitacion_id) = 144000,
+         format('volumen mobiliario %s; se esperaba 144000',
+                fn_calcular_volumen_mobiliario(v_habitacion_id));
+  RAISE NOTICE 'OK ocupacion volumetrica del 100 %%';
 
   -- Caso 5: agrandar el bloque existente con UPDATE tambien dispara la
   -- validacion (UPDATE OF ancho) y deja la fila como estaba.

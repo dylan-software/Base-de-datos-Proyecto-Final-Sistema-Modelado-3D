@@ -7,7 +7,8 @@
 -- Y -> alto, Z -> profundidad). Por eso:
 --   - un mueble sin medidas (un punto) cabe exactamente en (0, 0, 0);
 --   - un mueble con medidas toca la esquina origen en (ancho/2, 0, prof/2);
---   - el mismo mueble centrado en (0, 0, 0) sobresale y debe rechazarse.
+--   - el mismo mueble con su centro sobre la pared X = 0 sobresale y debe
+--     rechazarse.
 -- Cada insercion es una sola sentencia con RETURNING, como la que hace el
 -- backend al guardar las coordenadas calculadas por la IA: o se guarda la
 -- fila completa o no se guarda nada.
@@ -49,16 +50,19 @@ BEGIN
          'la mesa en la esquina origen no conservo sus coordenadas';
   RAISE NOTICE 'OK mueble con medidas en la esquina origen aceptado con id %', v_mueble.id;
 
-  -- Caso 3: la misma mesa centrada en (0, 0, 0) sobresale 0.5 m por X.
+  -- Caso 3: la misma mesa con su centro sobre la pared X = 0 sobresale
+  -- 0.5 m por X. Va en Z = 2.0 y no en (0, 0, 0) porque ahi esta el punto
+  -- del caso 1: trg_impedir_superposicion (14_spatial_collisions.sql) la
+  -- rechazaria por colision antes de revisar los limites.
   BEGIN
     INSERT INTO muebles_sugeridos
       (habitacion_id, nombre, posicion_x, posicion_y, posicion_z, ancho, alto, profundidad)
-    VALUES (v_habitacion_id, 'QA mesa fuera', 0.0, 0.0, 0.0, 1.0, 0.8, 0.6);
-    RAISE EXCEPTION 'FALLO: se acepto un mueble que sobresale del origen';
+    VALUES (v_habitacion_id, 'QA mesa fuera', 0.0, 0.0, 2.0, 1.0, 0.8, 0.6);
+    RAISE EXCEPTION 'FALLO: se acepto un mueble que sobresale de la pared X = 0';
   EXCEPTION
     WHEN check_violation THEN
       ASSERT SQLERRM LIKE '%eje X%', format('mensaje inesperado: %s', SQLERRM);
-      RAISE NOTICE 'OK mueble centrado en el origen rechazado: %', SQLERRM;
+      RAISE NOTICE 'OK mueble centrado sobre la pared X = 0 rechazado: %', SQLERRM;
   END;
 
   -- Solo deben quedar los dos muebles validos.
