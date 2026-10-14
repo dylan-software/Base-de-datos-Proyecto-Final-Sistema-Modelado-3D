@@ -1,0 +1,13 @@
+-- Mantenimiento del almacenamiento: estadisticas, tuplas muertas y
+-- reindexacion de los indices B-Tree. Ejecutar despues de
+-- procedures/sp_maintenance.sql (y de 11_supabase_policies.sql en
+-- Supabase).
+-- Igual que sp_maintenance.sql, esta pensado para correr fuera del flujo
+-- de la aplicacion: a mano desde el SQL Editor o programado con pg_cron.
+--
+-- muebles_sugeridos recibe un UPDATE cada vez que un mueble se mueve en el
+-- Canvas 3D. PostgreSQL no sobrescribe la fila: escribe una version nueva y
+-- deja la anterior como tupla muerta hasta que VACUUM marca su espacio como
+-- reutilizable. Autovacuum lo hace solo, pero tras una sesion de la IA que
+-- reubica cientos de muebles conviene revisar la tabla y refrescar las
+-- estadisticas sin esperarlo.
