@@ -141,3 +141,58 @@ ORDER BY idx_scan;
 
 Un indice con `idx_scan = 0` despues de semanas de uso no lo esta usando ninguna consulta: ocupa espacio y
 hace mas lentas las escrituras sin acelerar nada.
+
+## Como protegen la memoria las rutinas
+
+PostgreSQL lee y escribe la base en paginas de 8 kB y mantiene las mas usadas en `shared_buffers`, la cache en
+RAM del servidor. En el plan gratuito de Supabase esa memoria es pequena, asi que lo importante es que las
+paginas que el Canvas 3D consulta seguido (las "calientes") quepan en ella. Las rutinas no liberan RAM
+directamente: evitan que las tablas y los indices crezcan con paginas inutiles que desplazarian a las utiles.
+
+```
+  Canvas 3D / IA OmniRoute                                 PostgreSQL (Supabase)
+  ------------------------                                 ---------------------
+
+  UPDATE muebles_sugeridos ---------> muebles_sugeridos
+  (mover un mueble)                   [fila v1 muerta][fila v2 viva]
+                                         |                      |
+                                         |                      +--> trg_audit_muebles_cambios (AFTER)
+                                         |                           INSERT auditoria_muebles (old_*, new_*)
+                                         |                           solo agrega al final: sin tuplas muertas
+                                         v
+                                VACUUM (ANALYZE)  08:30 UTC
+                                marca v1 como espacio libre
+                                -> el proximo UPDATE lo reutiliza
+                                -> la tabla no crece, sus paginas
+                                   siguen cabiendo en shared_buffers
+                                         |
+                                         v
+                                fn_reindexar_tablas_espaciales()  dom 09:00 UTC
+                                reescribe los B-Tree compactos
+                                -> menos paginas de indice por busqueda
+
+  INSERT historial_ia --------------> historial_ia (PARTITION BY RANGE creado_en)
+  (nueva recomendacion)                 |
+                                        +--> historial_ia_2026     CALIENTE: la leen el panel y el
+                                        |    [idx habitacion_id,   frontend; pequena, se queda en cache
+                                        |     creado_en DESC]
+                                        |
+                                        +--> historial_ia_default  FRIA: anos anteriores; una consulta
+                                             (anos anteriores)     con rango de fechas del ano actual no
+                                                                   la abre (partition pruning)
+
+                                retirar un ano: DETACH / DROP PARTITION
+                                -> sin DELETE masivo, sin tuplas muertas, sin VACUUM posterior
+
+  fn_generar_backup_json_habitacion(id) ---> un SELECT consistente (no bloquea)
+                                        +--> fn_registrar_respaldo -> log_respaldos (misma transaccion)
+```
+
+- **Trigger de auditoria.** `auditoria_muebles` solo recibe `INSERT`: nunca deja tuplas muertas y su indice
+  `(mueble_id, modificado_en)` crece en orden. El costo de cada movimiento queda en `muebles_sugeridos`, que es
+  la tabla que `VACUUM` mantiene compacta todos los dias.
+- **Particionamiento.** El trabajo diario toca solo `historial_ia_2026` y su indice. Una consulta con limite
+  inferior y superior de fecha dentro de 2026 no abre `historial_ia_default`; una con solo limite inferior
+  (`creado_en >= ...`) si la revisa, porque la default tambien recibe fechas futuras sin particion.
+- **Sin borrados masivos.** Retirar un ano con `DROP PARTITION` borra el archivo completo: no deja millones de
+  tuplas muertas que `VACUUM` tendria que recorrer, ni paginas vacias que la cache cargue de nuevo.
