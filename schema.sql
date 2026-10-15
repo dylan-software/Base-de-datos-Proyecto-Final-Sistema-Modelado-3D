@@ -66,3 +66,16 @@ CREATE INDEX IF NOT EXISTS ix_habitaciones_user_id ON habitaciones (user_id);
 
 -- Irregular, editable floor polygon. NULL for rooms created by /analyze, which are rectangles.
 ALTER TABLE habitaciones ADD COLUMN IF NOT EXISTS vertices JSONB;
+
+-- Furniture placed in a room (AI proposal or generated layout). Deleting a room deletes its furniture.
+CREATE TABLE IF NOT EXISTS muebles_sugeridos (
+  id             SERIAL PRIMARY KEY,
+  habitacion_id  INTEGER NOT NULL REFERENCES habitaciones (id) ON DELETE CASCADE,
+  nombre         VARCHAR(120) NOT NULL,
+  ancho          FLOAT NOT NULL,
+  alto           FLOAT NOT NULL,
+  profundidad    FLOAT NOT NULL,
+  posicion_x     FLOAT NOT NULL,
+  posicion_y     FLOAT NOT NULL,
+  posicion_z     FLOAT NOT NULL
+);
