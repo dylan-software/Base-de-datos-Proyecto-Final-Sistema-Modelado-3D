@@ -46,3 +46,6 @@ CREATE INDEX IF NOT EXISTS ix_muebles_catalogo_categoria_id ON muebles_catalogo 
 -- Owning account (the token's "sub"). A separate ALTER so databases created before the column
 -- existed get it too; on a fresh database it simply adds it.
 ALTER TABLE muebles_catalogo ADD COLUMN IF NOT EXISTS user_id VARCHAR(64);
+
+-- Every catalog query filters by the owning account.
+CREATE INDEX IF NOT EXISTS ix_muebles_catalogo_user_id ON muebles_catalogo (user_id);
