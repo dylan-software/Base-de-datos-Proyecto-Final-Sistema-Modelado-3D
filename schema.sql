@@ -126,3 +126,13 @@ BEGIN
   END LOOP;
 END
 $$;
+
+-- ---------------------------------------------------------------------------------------------
+-- Column documentation, visible in the Supabase Table Editor. Units differ between tables:
+-- muebles_catalogo is in CENTIMETERS, habitaciones and muebles_sugeridos are in METERS.
+-- ---------------------------------------------------------------------------------------------
+
+COMMENT ON TABLE usuarios IS 'Accounts of the web app. The backend issues HS256 session tokens whose sub is usuarios.id.';
+COMMENT ON COLUMN usuarios.nombre IS 'Display name entered at registration.';
+COMMENT ON COLUMN usuarios.email IS 'Login email, stored trimmed and lowercased by the backend; unique.';
+COMMENT ON COLUMN usuarios.password_hash IS 'scrypt$<salt hex>$<hash hex> (n = 2^14, r = 8, p = 1). Never the plain password.';
