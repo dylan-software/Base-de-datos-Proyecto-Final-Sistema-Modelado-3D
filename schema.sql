@@ -91,3 +91,5 @@ CREATE INDEX IF NOT EXISTS ix_muebles_sugeridos_habitacion_id ON muebles_sugerid
 
 -- Most sensitive table: emails and password hashes.
 ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE categorias ENABLE ROW LEVEL SECURITY;
