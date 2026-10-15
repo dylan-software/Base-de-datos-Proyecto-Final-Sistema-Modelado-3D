@@ -101,5 +101,18 @@ FROM (
          coalesce('policies: ' || string_agg(tablename::text || '.' || policyname::text, ', '), 'none')
   FROM pg_policies
   WHERE schemaname = 'public' AND tablename::text IN (SELECT name FROM app_tables)
+  UNION ALL
+  -- 10. The backend connects as the owner, which bypasses RLS, unless RLS is FORCEd on the table.
+  SELECT 10, 'the app tables are owned by the current role, RLS not forced',
+         count(*) = 5 AND coalesce(bool_and(owned), false) AND NOT coalesce(bool_or(forced), false),
+         coalesce(string_agg(name || ': ' || owner || CASE WHEN forced THEN ' (FORCE RLS)' ELSE '' END,
+                             ', ' ORDER BY name), 'no tables')
+           || ' (current role: ' || current_user || ')'
+  FROM (
+    SELECT a.name, pg_get_userbyid(c.relowner)::text AS owner, pg_has_role(c.relowner, 'USAGE') AS owned,
+           c.relforcerowsecurity AS forced
+    FROM app_tables a
+    JOIN pg_class c ON c.oid = to_regclass('public.' || a.name)
+  ) s
 ) AS checks
 ORDER BY n;
