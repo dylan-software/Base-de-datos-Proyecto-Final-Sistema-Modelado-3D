@@ -68,5 +68,14 @@ FROM (
              AND confrelid = to_regclass('public.habitaciones') AND confdeltype = 'c'
          ),
          'habitacion_id -> habitaciones(id) ON DELETE CASCADE'
+  UNION ALL
+  -- 7. RLS closes the Supabase REST API on every app table, usuarios included.
+  SELECT 7, 'RLS is on for the five tables', missing IS NULL, coalesce('without RLS: ' || missing, 'all five')
+  FROM (
+    SELECT string_agg(a.name, ', ') AS missing
+    FROM app_tables a
+    LEFT JOIN pg_class c ON c.oid = to_regclass('public.' || a.name)
+    WHERE c.relrowsecurity IS NOT TRUE
+  ) s
 ) AS checks
 ORDER BY n;
