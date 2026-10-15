@@ -17,5 +17,17 @@ FROM (
   FROM (
     SELECT string_agg(name, ', ') AS missing FROM app_tables WHERE to_regclass('public.' || name) IS NULL
   ) s
+  UNION ALL
+  -- 2. usuarios is the backend's table, not the incompatible one from scripts/04_security.sql.
+  SELECT 2, 'usuarios has the backend columns', missing IS NULL AND NOT legacy,
+         CASE WHEN legacy THEN 'usuarios comes from scripts/04_security.sql (has nombre_usuario): incompatible'
+              ELSE coalesce('missing: ' || missing, 'nombre, email, password_hash') END
+  FROM (
+    SELECT
+      (SELECT string_agg(want.col, ', ')
+       FROM unnest(ARRAY['nombre', 'email', 'password_hash']) AS want(col)
+       WHERE NOT EXISTS (SELECT 1 FROM cols WHERE cols.t = 'usuarios' AND cols.c = want.col)) AS missing,
+      EXISTS (SELECT 1 FROM cols WHERE cols.t = 'usuarios' AND cols.c = 'nombre_usuario') AS legacy
+  ) s
 ) AS checks
 ORDER BY n;
