@@ -1,17 +1,21 @@
--- Run this in the Supabase SQL editor AFTER schema.sql, to confirm it worked.
-
--- 1) Extensions: expect 2 rows (postgis, vector)
-SELECT extname FROM pg_extension WHERE extname IN ('postgis', 'vector') ORDER BY extname;
-
--- 2) Tables: expect 4 rows (furniture, placed_items, projects, spaces)
-SELECT table_name FROM information_schema.tables
-WHERE table_schema = 'public' AND table_name IN ('furniture', 'projects', 'spaces', 'placed_items')
-ORDER BY table_name;
-
--- 3) Indexes: expect 3 rows (idx_furniture_style_embedding, idx_placed_items_project, idx_spaces_shape)
-SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND indexname LIKE 'idx_%' ORDER BY indexname;
-
--- 4) Row Level Security: expect 4 rows, all with relrowsecurity = true
-SELECT relname, relrowsecurity FROM pg_class
-WHERE relname IN ('furniture', 'projects', 'spaces', 'placed_items') AND relkind = 'r'
-ORDER BY relname;
+-- Run in the Supabase SQL Editor AFTER schema.sql (or the migrations/) to confirm the database
+-- matches the FastAPI backend. Plain SQL, read-only, one single query: the editor shows every check
+-- in one result grid. Every row must have ok = true; detail says what is missing or wrong.
+WITH app_tables(name) AS (
+  VALUES ('usuarios'), ('categorias'), ('muebles_catalogo'), ('habitaciones'), ('muebles_sugeridos')
+),
+cols AS (
+  SELECT table_name::text AS t, column_name::text AS c, data_type::text AS type
+  FROM information_schema.columns
+  WHERE table_schema = 'public'
+)
+SELECT n, check_name, ok, detail
+FROM (
+  -- 1. The five tables of the backend exist.
+  SELECT 1 AS n, 'the five tables exist' AS check_name, missing IS NULL AS ok,
+         coalesce('missing: ' || missing, 'all present') AS detail
+  FROM (
+    SELECT string_agg(name, ', ') AS missing FROM app_tables WHERE to_regclass('public.' || name) IS NULL
+  ) s
+) AS checks
+ORDER BY n;
