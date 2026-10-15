@@ -136,3 +136,6 @@ COMMENT ON TABLE usuarios IS 'Accounts of the web app. The backend issues HS256 
 COMMENT ON COLUMN usuarios.nombre IS 'Display name entered at registration.';
 COMMENT ON COLUMN usuarios.email IS 'Login email, stored trimmed and lowercased by the backend; unique.';
 COMMENT ON COLUMN usuarios.password_hash IS 'scrypt$<salt hex>$<hash hex> (n = 2^14, r = 8, p = 1). Never the plain password.';
+
+COMMENT ON TABLE categorias IS 'Furniture categories, shared by every account.';
+COMMENT ON COLUMN categorias.nombre IS 'Category name as first typed; unique ignoring case (uq_categorias_nombre_lower).';
