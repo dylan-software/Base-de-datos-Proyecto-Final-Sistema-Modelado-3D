@@ -139,3 +139,11 @@ COMMENT ON COLUMN usuarios.password_hash IS 'scrypt$<salt hex>$<hash hex> (n = 2
 
 COMMENT ON TABLE categorias IS 'Furniture categories, shared by every account.';
 COMMENT ON COLUMN categorias.nombre IS 'Category name as first typed; unique ignoring case (uq_categorias_nombre_lower).';
+
+COMMENT ON TABLE muebles_catalogo IS 'Furniture each account adds to its own catalog. Sizes in CENTIMETERS.';
+COMMENT ON COLUMN muebles_catalogo.user_id IS 'Owning account: the session token sub (usuarios.id as text).';
+COMMENT ON COLUMN muebles_catalogo.categoria_id IS 'Category of the item (categorias.id).';
+COMMENT ON COLUMN muebles_catalogo.nombre IS 'Item name, checked by the backend to be a plausible piece of furniture.';
+COMMENT ON COLUMN muebles_catalogo.ancho IS 'Width in CENTIMETERS, as typed in the web form (rooms use meters).';
+COMMENT ON COLUMN muebles_catalogo.alto IS 'Height in CENTIMETERS.';
+COMMENT ON COLUMN muebles_catalogo.profundidad IS 'Depth in CENTIMETERS.';
