@@ -29,5 +29,11 @@ FROM (
        WHERE NOT EXISTS (SELECT 1 FROM cols WHERE cols.t = 'usuarios' AND cols.c = want.col)) AS missing,
       EXISTS (SELECT 1 FROM cols WHERE cols.t = 'usuarios' AND cols.c = 'nombre_usuario') AS legacy
   ) s
+  UNION ALL
+  -- 3. Rooms and catalog items record their owning account.
+  SELECT 3, 'user_id columns exist', count(*) = 2,
+         coalesce('found: ' || string_agg(t || '.user_id', ', ' ORDER BY t), 'missing on both tables')
+  FROM cols
+  WHERE c = 'user_id' AND t IN ('habitaciones', 'muebles_catalogo') AND type = 'character varying'
 ) AS checks
 ORDER BY n;
