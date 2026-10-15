@@ -99,3 +99,30 @@ ALTER TABLE muebles_catalogo ENABLE ROW LEVEL SECURITY;
 ALTER TABLE habitaciones ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE muebles_sugeridos ENABLE ROW LEVEL SECURITY;
+
+-- Any other table in "public" that the current role owns, such as the tables of the old Node backend
+-- (furniture, projects, spaces, placed_items) if they were ever created. Tables that belong to an
+-- extension (e.g. PostGIS's spatial_ref_sys) or to another role are skipped: on Supabase they cannot
+-- be altered by this role. verify.sql lists whatever is left without RLS.
+DO $$
+DECLARE
+  t regclass;
+BEGIN
+  FOR t IN
+    SELECT c.oid::regclass
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relkind IN ('r', 'p')
+      AND NOT c.relrowsecurity
+      AND pg_has_role(c.relowner, 'USAGE')
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_depend d
+        WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'e'
+      )
+  LOOP
+    EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', t);
+    RAISE NOTICE 'RLS enabled on %', t;
+  END LOOP;
+END
+$$;
