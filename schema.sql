@@ -21,3 +21,9 @@ CREATE TABLE IF NOT EXISTS usuarios (
 
 -- One account per email. The backend lowercases emails before storing them.
 CREATE UNIQUE INDEX IF NOT EXISTS ix_usuarios_email ON usuarios (email);
+
+-- Furniture categories, shared by every account.
+CREATE TABLE IF NOT EXISTS categorias (
+  id      SERIAL PRIMARY KEY,
+  nombre  VARCHAR(60) NOT NULL
+);
