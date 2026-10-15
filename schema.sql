@@ -30,3 +30,13 @@ CREATE TABLE IF NOT EXISTS categorias (
 
 -- "Asientos" and "asientos" are the same category.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_categorias_nombre_lower ON categorias (lower(nombre));
+
+-- Furniture each account adds to its own catalog.
+CREATE TABLE IF NOT EXISTS muebles_catalogo (
+  id            SERIAL PRIMARY KEY,
+  categoria_id  INTEGER NOT NULL REFERENCES categorias (id),
+  nombre        VARCHAR(120) NOT NULL,
+  ancho         FLOAT NOT NULL,
+  alto          FLOAT NOT NULL,
+  profundidad   FLOAT NOT NULL
+);
