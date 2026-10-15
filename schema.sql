@@ -155,3 +155,13 @@ COMMENT ON COLUMN habitaciones.ancho IS 'Extent along x in meters; the bounding 
 COMMENT ON COLUMN habitaciones.alto IS 'Ceiling height in meters (3D y axis).';
 COMMENT ON COLUMN habitaciones.profundidad IS 'Extent along z in meters; the bounding box of vertices when they are set.';
 COMMENT ON COLUMN habitaciones.vertices IS 'Floor polygon as [{"x": m, "y": m}, ...]; the polygon y is the 3D z axis. NULL means the rectangle [0, ancho] x [0, profundidad].';
+
+COMMENT ON TABLE muebles_sugeridos IS 'Furniture placed in a room by the AI proposal or the generated layout. Meters.';
+COMMENT ON COLUMN muebles_sugeridos.habitacion_id IS 'Room the piece is placed in (habitaciones.id); deleted with the room.';
+COMMENT ON COLUMN muebles_sugeridos.nombre IS 'Name of the placed piece.';
+COMMENT ON COLUMN muebles_sugeridos.ancho IS 'Width along x in meters.';
+COMMENT ON COLUMN muebles_sugeridos.alto IS 'Height in meters.';
+COMMENT ON COLUMN muebles_sugeridos.profundidad IS 'Depth along z in meters.';
+COMMENT ON COLUMN muebles_sugeridos.posicion_x IS 'Center of the footprint along x, in meters.';
+COMMENT ON COLUMN muebles_sugeridos.posicion_y IS 'Height of the base above the floor, in meters (0 = on the floor).';
+COMMENT ON COLUMN muebles_sugeridos.posicion_z IS 'Center of the footprint along z, in meters.';
