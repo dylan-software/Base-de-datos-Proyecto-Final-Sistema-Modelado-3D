@@ -95,5 +95,11 @@ FROM (
     JOIN pg_namespace ns ON ns.oid = c.relnamespace
     WHERE ns.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relrowsecurity
   ) s
+  UNION ALL
+  -- 9. RLS without policies: anon and authenticated get nothing. A policy here would reopen the API.
+  SELECT 9, 'no RLS policies on the app tables', count(*) = 0,
+         coalesce('policies: ' || string_agg(tablename::text || '.' || policyname::text, ', '), 'none')
+  FROM pg_policies
+  WHERE schemaname = 'public' AND tablename::text IN (SELECT name FROM app_tables)
 ) AS checks
 ORDER BY n;
