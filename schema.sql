@@ -93,3 +93,5 @@ CREATE INDEX IF NOT EXISTS ix_muebles_sugeridos_habitacion_id ON muebles_sugerid
 ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE categorias ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE muebles_catalogo ENABLE ROW LEVEL SECURITY;
