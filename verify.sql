@@ -41,5 +41,23 @@ FROM (
          coalesce('type: ' || max(type), 'column missing')
   FROM cols
   WHERE t = 'habitaciones' AND c = 'vertices'
+  UNION ALL
+  -- 5. The six indexes of the models exist; the two unique ones are unique.
+  SELECT 5, 'the six indexes exist', missing IS NULL AND not_unique IS NULL,
+         coalesce(nullif(concat_ws(' ', 'missing: ' || missing, 'not unique: ' || not_unique), ''), 'all present')
+  FROM (
+    SELECT
+      (SELECT string_agg(idx.name, ', ')
+       FROM unnest(ARRAY[
+         'ix_usuarios_email', 'uq_categorias_nombre_lower', 'ix_muebles_catalogo_categoria_id',
+         'ix_muebles_catalogo_user_id', 'ix_habitaciones_user_id', 'ix_muebles_sugeridos_habitacion_id'
+       ]) AS idx(name)
+       WHERE to_regclass('public.' || idx.name) IS NULL) AS missing,
+      (SELECT string_agg(idx.name, ', ')
+       FROM unnest(ARRAY['ix_usuarios_email', 'uq_categorias_nombre_lower']) AS idx(name)
+       WHERE NOT EXISTS (
+         SELECT 1 FROM pg_index x WHERE x.indexrelid = to_regclass('public.' || idx.name) AND x.indisunique
+       )) AS not_unique
+  ) s
 ) AS checks
 ORDER BY n;
