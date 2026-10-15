@@ -77,5 +77,23 @@ FROM (
     LEFT JOIN pg_class c ON c.oid = to_regclass('public.' || a.name)
     WHERE c.relrowsecurity IS NOT TRUE
   ) s
+  UNION ALL
+  -- 8. Other public tables without RLS. Only extension tables or tables owned by another role
+  --    (e.g. PostGIS's spatial_ref_sys) may remain; they are listed for review.
+  SELECT 8, 'no other owned public table lacks RLS', count(*) FILTER (WHERE owned AND NOT extension) = 0,
+         coalesce(string_agg(name || CASE WHEN extension THEN ' (extension)'
+                                          WHEN NOT owned THEN ' (owner: ' || owner || ')' ELSE '' END,
+                             ', ' ORDER BY name), 'none')
+  FROM (
+    SELECT c.relname::text AS name, pg_get_userbyid(c.relowner)::text AS owner,
+           pg_has_role(c.relowner, 'USAGE') AS owned,
+           EXISTS (
+             SELECT 1 FROM pg_depend d
+             WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'e'
+           ) AS extension
+    FROM pg_class c
+    JOIN pg_namespace ns ON ns.oid = c.relnamespace
+    WHERE ns.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relrowsecurity
+  ) s
 ) AS checks
 ORDER BY n;
