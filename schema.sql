@@ -18,3 +18,6 @@ CREATE TABLE IF NOT EXISTS usuarios (
   email          VARCHAR(254) NOT NULL,
   password_hash  VARCHAR(255) NOT NULL
 );
+
+-- One account per email. The backend lowercases emails before storing them.
+CREATE UNIQUE INDEX IF NOT EXISTS ix_usuarios_email ON usuarios (email);
