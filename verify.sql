@@ -59,5 +59,14 @@ FROM (
          SELECT 1 FROM pg_index x WHERE x.indexrelid = to_regclass('public.' || idx.name) AND x.indisunique
        )) AS not_unique
   ) s
+  UNION ALL
+  -- 6. Deleting a room deletes its placed furniture.
+  SELECT 6, 'muebles_sugeridos cascades on room delete',
+         EXISTS (
+           SELECT 1 FROM pg_constraint
+           WHERE conrelid = to_regclass('public.muebles_sugeridos') AND contype = 'f'
+             AND confrelid = to_regclass('public.habitaciones') AND confdeltype = 'c'
+         ),
+         'habitacion_id -> habitaciones(id) ON DELETE CASCADE'
 ) AS checks
 ORDER BY n;
