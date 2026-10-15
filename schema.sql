@@ -147,3 +147,11 @@ COMMENT ON COLUMN muebles_catalogo.nombre IS 'Item name, checked by the backend 
 COMMENT ON COLUMN muebles_catalogo.ancho IS 'Width in CENTIMETERS, as typed in the web form (rooms use meters).';
 COMMENT ON COLUMN muebles_catalogo.alto IS 'Height in CENTIMETERS.';
 COMMENT ON COLUMN muebles_catalogo.profundidad IS 'Depth in CENTIMETERS.';
+
+COMMENT ON TABLE habitaciones IS 'Rooms. Meters; the 3D y axis points up, the floor is the x/z plane.';
+COMMENT ON COLUMN habitaciones.user_id IS 'Owning account: the session token sub (usuarios.id as text).';
+COMMENT ON COLUMN habitaciones.nombre IS 'Room name.';
+COMMENT ON COLUMN habitaciones.ancho IS 'Extent along x in meters; the bounding box of vertices when they are set.';
+COMMENT ON COLUMN habitaciones.alto IS 'Ceiling height in meters (3D y axis).';
+COMMENT ON COLUMN habitaciones.profundidad IS 'Extent along z in meters; the bounding box of vertices when they are set.';
+COMMENT ON COLUMN habitaciones.vertices IS 'Floor polygon as [{"x": m, "y": m}, ...]; the polygon y is the 3D z axis. NULL means the rectangle [0, ancho] x [0, profundidad].';
