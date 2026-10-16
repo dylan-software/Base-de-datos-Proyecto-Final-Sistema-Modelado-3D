@@ -114,5 +114,16 @@ FROM (
     FROM app_tables a
     JOIN pg_class c ON c.oid = to_regclass('public.' || a.name)
   ) s
+  UNION ALL
+  -- 11. Every column except id is documented (units: catalog in cm, rooms and placed furniture in m).
+  SELECT 11, 'every column except id has a comment', missing IS NULL,
+         coalesce('without comment: ' || missing, 'all documented')
+  FROM (
+    SELECT string_agg(cols.t || '.' || cols.c, ', ' ORDER BY cols.t, cols.c) AS missing
+    FROM cols
+    JOIN pg_attribute att ON att.attrelid = to_regclass('public.' || cols.t) AND att.attname = cols.c
+    WHERE cols.t IN (SELECT name FROM app_tables) AND cols.c <> 'id'
+      AND col_description(att.attrelid, att.attnum) IS NULL
+  ) s
 ) AS checks
 ORDER BY n;
