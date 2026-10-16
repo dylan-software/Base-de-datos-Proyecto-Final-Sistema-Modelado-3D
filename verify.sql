@@ -35,5 +35,11 @@ FROM (
          coalesce('found: ' || string_agg(t || '.user_id', ', ' ORDER BY t), 'missing on both tables')
   FROM cols
   WHERE c = 'user_id' AND t IN ('habitaciones', 'muebles_catalogo') AND type = 'character varying'
+  UNION ALL
+  -- 4. The editable floor polygon column exists with the right type.
+  SELECT 4, 'habitaciones.vertices is jsonb', coalesce(bool_and(type = 'jsonb'), false),
+         coalesce('type: ' || max(type), 'column missing')
+  FROM cols
+  WHERE t = 'habitaciones' AND c = 'vertices'
 ) AS checks
 ORDER BY n;
