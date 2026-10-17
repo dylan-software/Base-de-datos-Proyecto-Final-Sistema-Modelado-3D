@@ -1,5 +1,9 @@
 # Guia de mantenimiento y conservacion del almacenamiento
 
+> **OBSOLETO.** Este documento describe el esquema academico de `scripts/` (base local `modelado_3d`), que
+> el backend FastAPI no usa y que es incompatible con el suyo; ver [`scripts/README.md`](../scripts/README.md).
+> El esquema vigente es `schema.sql`, descrito en [`schema_fastapi.md`](schema_fastapi.md).
+
 Este documento explica cuando y como correr las rutinas de `scripts/12_db_maintenance.sql`,
 `scripts/13_partitioning.sql` y `scripts/procedures/sp_backups.sql`, y como vigilar el tamano de la base en
 Supabase. Complementa a `fn_purgar_habitaciones_vacias` de `scripts/procedures/sp_maintenance.sql`.
