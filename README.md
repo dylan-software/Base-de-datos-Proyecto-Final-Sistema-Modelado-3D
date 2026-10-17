@@ -18,16 +18,20 @@ Not for the web app:
   `placed_items`). Obsolete, kept for reference.
 - `scripts/` — an obsolete academic schema, incompatible with the backend. See `scripts/README.md`.
 
-## Steps
+## Steps for a new Supabase project
 1. Create a project at https://supabase.com. Choose a region and set a database password — **save it**, you need it in step 4.
 2. Open **SQL Editor → New query**, paste the full contents of `schema.sql`, and click **Run**.
-   It should finish with "Success. No rows returned".
-   If `CREATE EXTENSION` is rejected, enable `postgis` and `vector` from **Database → Extensions** and run the script again.
-3. New query → paste `verify.sql` → Run each query and compare with the "expect" comments inside the file.
+   It should finish with "Success. No rows returned". No extension is needed.
+3. New query → paste `verify.sql` → **Run**. It returns one grid with one row per check: every row must
+   show `ok = true`; the `detail` column says what is missing otherwise.
 4. Click **Connect** (top of the dashboard) and copy the **Session pooler** connection string. It looks like:
    `postgres://postgres.<project-ref>:[YOUR-PASSWORD]@aws-0-<region>.pooler.supabase.com:5432/postgres`
    Replace `[YOUR-PASSWORD]` with your password. If the password contains special characters (`@ : / # ?`),
    URL-encode them. This full string is what you set as `DATABASE_URL` in the **backend**.
+
+Run the SQL before deploying the backend. The backend also creates missing tables and columns at startup,
+so the order of the two never duplicates anything, but only `schema.sql` turns on RLS and adds the column
+comments.
 
 ## Why the *Session pooler* string and not "Direct connection"
 Supabase's direct connection (`db.<ref>.supabase.co`) resolves to an IPv6 address only (unless you pay for the
