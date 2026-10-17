@@ -72,10 +72,22 @@ Supabase Table Editor.
 - Converting the catalog's centimeters to meters is the backend's job, in a single place; the database
   stores each value in the unit of its table.
 
-## Why Row Level Security is on
+## Why Row Level Security is on, on every table
 Supabase exposes every table in the `public` schema through an auto-generated REST API. This app never uses
 that API — only the backend talks to the database. Enabling RLS with no policies closes that REST API door
 completely, and the backend is unaffected because it connects as the table owner (owners bypass RLS).
+
+- It is on for **all five tables, including `usuarios`**, which holds emails and password hashes, and on
+  any other table in `public` owned by the same role (such as leftovers of the old Node backend).
+  Extension tables (for example PostGIS's `spatial_ref_sys`) are skipped because this role cannot alter them.
+- There are **no policies on purpose**: a policy would reopen part of the API. Do not add one.
+- Do not use `FORCE ROW LEVEL SECURITY`: it would apply RLS to the owner too and lock out the backend.
+- `verify.sql` checks all of this (checks 7–10): RLS on the five tables, no other owned table without it,
+  no policies, and tables owned by the current role without FORCE.
+
+To roll it back, run `migrations/rollback/003_disable_rls.sql`. That reopens the REST API on the five
+tables, so anyone with the project's public anon key may be able to read them, including `usuarios`. Use it
+only to diagnose a problem and run `migrations/003_enable_rls.sql` (or `schema.sql`) again right after.
 
 ## What was tested
 `schema.sql` and the backend were run end-to-end against a real PostgreSQL 16 + PostGIS 3.4 + pgvector 0.6
