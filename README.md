@@ -89,11 +89,24 @@ To roll it back, run `migrations/rollback/003_disable_rls.sql`. That reopens the
 tables, so anyone with the project's public anon key may be able to read them, including `usuarios`. Use it
 only to diagnose a problem and run `migrations/003_enable_rls.sql` (or `schema.sql`) again right after.
 
-## What was tested
-`schema.sql` and the backend were run end-to-end against a real PostgreSQL 16 + PostGIS 3.4 + pgvector 0.6
-(create an L-shaped space, move a vertex, create objects, generate and read back a layout), and the RLS
-behaviour was checked with a restricted role. It was **not** run against a live Supabase project, since that
-requires your account.
+## What was and was not tested
+Tested, without a database:
+- `schema.sql` was compared with the backend's SQLAlchemy models by a script that parses the SQL: same
+  tables, columns, types, nullability, primary and foreign keys (with `ON DELETE`), index names and
+  uniqueness, RLS on every table and a comment on every column.
+- The same comparison on an old database (the tables without `user_id`, `vertices`, RLS or comments) plus
+  `migrations/001`–`004` gives exactly the models.
+- `schema.sql`, `verify.sql`, `migrations/` and the test files contain no psql meta-commands or
+  `CREATE DATABASE`, so they run in the Supabase SQL Editor.
+
+**Not tested yet:**
+- None of these files has been executed on PostgreSQL: there was no server available. `tests/run_all.sql`
+  is written for that run (see `tests/README.md`), including applying `schema.sql` twice for idempotence.
+- Nothing has been run on a live Supabase project, so `tests/test_rls_blocks_anon.sql` (the only test that
+  needs Supabase's `anon` and `authenticated` roles) has not been run either.
+
+Earlier versions of this README described an end-to-end run with PostGIS and pgvector. That run was of the
+old Node schema, now in `legacy/node-schema.sql`, and says nothing about the current `schema.sql`.
 
 ---
 
