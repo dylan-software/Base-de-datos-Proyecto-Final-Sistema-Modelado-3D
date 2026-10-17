@@ -1,5 +1,9 @@
 # Guia de algebra vectorial y colisiones en PostgreSQL
 
+> **OBSOLETO.** Este documento describe el esquema academico de `scripts/` (base local `modelado_3d`), que
+> el backend FastAPI no usa y que es incompatible con el suyo; ver [`scripts/README.md`](../scripts/README.md).
+> El esquema vigente es `schema.sql`, descrito en [`schema_fastapi.md`](schema_fastapi.md).
+
 Este documento explica la matematica detras de `scripts/14_spatial_collisions.sql` y
 `scripts/procedures/sp_vector_math.sql`: como se representa la posicion de un mueble, como se decide que dos
 muebles chocan y como se calcula el centro de masa de una habitacion. Complementa a `fn_distancia_euclidiana`
