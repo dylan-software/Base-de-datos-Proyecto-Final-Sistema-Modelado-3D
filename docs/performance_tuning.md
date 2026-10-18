@@ -1,5 +1,9 @@
 # Afinamiento de consultas y planes de ejecucion
 
+> **OBSOLETO.** Este documento describe el esquema academico de `scripts/` (base local `modelado_3d`), que
+> el backend FastAPI no usa y que es incompatible con el suyo; ver [`scripts/README.md`](../scripts/README.md).
+> El esquema vigente es `schema.sql`, descrito en [`schema_fastapi.md`](schema_fastapi.md).
+
 Este documento explica los indices de `scripts/09_performance_indexes.sql` y el costo de las politicas RLS de
 `scripts/11_supabase_policies.sql`, con los planes que devolvio `EXPLAIN (ANALYZE, BUFFERS)`.
 
