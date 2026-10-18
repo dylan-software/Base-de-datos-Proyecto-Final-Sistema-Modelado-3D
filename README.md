@@ -33,6 +33,19 @@ Run the SQL before deploying the backend. The backend also creates missing table
 so the order of the two never duplicates anything, but only `schema.sql` turns on RLS and adds the column
 comments.
 
+## Upgrading an existing database
+For a Supabase project that already has the backend's tables (for example, created by an older backend
+before `user_id`, `vertices` or RLS existed):
+
+1. Back up the database (**Database → Backups**, or `pg_dump`).
+2. Run `migrations/001_*.sql` to `004_*.sql` in the SQL Editor, one at a time and in number order. Each one
+   is idempotent and runs in its own transaction, so a file that was already applied changes nothing.
+3. Run `verify.sql` and check that every row shows `ok = true`.
+
+Running `schema.sql` instead gives the same result, because it only adds what is missing. The migrations
+exist to apply and review the changes one step at a time and to undo them: `migrations/README.md` explains
+each file and the rollbacks in `migrations/rollback/`.
+
 ## Why the *Session pooler* string and not "Direct connection"
 Supabase's direct connection (`db.<ref>.supabase.co`) resolves to an IPv6 address only (unless you pay for the
 IPv4 add-on). Render does not support outbound IPv6, and Railway does not either, so the direct string fails
