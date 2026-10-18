@@ -52,6 +52,26 @@ IPv4 add-on). Render does not support outbound IPv6, and Railway does not either
 there. The Session pooler is reachable over IPv4 and works with a long-lived backend like this one. Use the
 direct string only if your backend host supports IPv6.
 
+## Units and coordinate conventions
+The units are **not** the same in every table. They are also written as column comments, visible in the
+Supabase Table Editor.
+
+| Table | Unit | Notes |
+|---|---|---|
+| `muebles_catalogo` | **centimeters** | `ancho`, `alto`, `profundidad` as the user types them in the web form |
+| `habitaciones` | meters | `ancho` / `profundidad` = extent along x / z, `alto` = ceiling height |
+| `muebles_sugeridos` | meters | sizes and position of each piece placed in a room |
+
+- Axes follow Three.js: **x** is width, **y** points up, **z** is depth. The floor is the x/z plane.
+- `habitaciones.vertices` is the floor polygon, a JSON array `[{"x": 0, "y": 0}, {"x": 4, "y": 0}, ...]`
+  in meters, at least 3 vertices, in order. Its `y` is the 3D **z** axis. When it is set, `ancho` and
+  `profundidad` are its bounding box. `NULL` means the rectangle `[0, ancho] x [0, profundidad]`.
+- `muebles_sugeridos.posicion_x` / `posicion_z` are the **center** of the piece's footprint, and
+  `posicion_y` is the height of its base (0 = on the floor). Code that works with another reference point,
+  such as the minimum corner of the footprint, converts when reading and writing.
+- Converting the catalog's centimeters to meters is the backend's job, in a single place; the database
+  stores each value in the unit of its table.
+
 ## Why Row Level Security is on
 Supabase exposes every table in the `public` schema through an auto-generated REST API. This app never uses
 that API — only the backend talks to the database. Enabling RLS with no policies closes that REST API door
