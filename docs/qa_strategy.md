@@ -1,5 +1,12 @@
 # Estrategia de aseguramiento de calidad
 
+> **OBSOLETO.** Este documento describe el esquema academico de `scripts/` (base local `modelado_3d`), que
+> el backend FastAPI no usa y que es incompatible con el suyo; ver [`scripts/README.md`](../scripts/README.md).
+> El esquema vigente es `schema.sql`, descrito en [`schema_fastapi.md`](schema_fastapi.md).
+>
+> Donde este documento dice `schema.sql` (con `postgis`, `vector` y las tablas `furniture`, `spaces`, ...) se
+> refiere al esquema del backend Node, que ahora esta en `legacy/node-schema.sql`.
+
 Este documento describe la suite de pruebas SQL de `scripts/qa_tests/`: que verifica, como esta escrita cada
 prueba y como se valido. La suite certifica las reglas que viven dentro de la base de datos (llaves foraneas,
 triggers, funciones, indices y politicas RLS), que son las que protegen los datos aunque el backend o el
