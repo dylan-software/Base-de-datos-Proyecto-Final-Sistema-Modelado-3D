@@ -39,6 +39,10 @@ requires your account.
 
 # Base de datos local — PostgreSQL (`scripts/`)
 
+> **OBSOLETO.** Todo lo que sigue describe el esquema academico de `scripts/`, que el backend FastAPI no usa
+> y que es incompatible con el suyo. No lo ejecutes en la base de la aplicacion: lee
+> [`scripts/README.md`](scripts/README.md). El esquema vigente es `schema.sql` (seccion de arriba).
+
 Esquema relacional independiente del de Supabase para la aplicacion web de modelado 3D. Persiste las
 dimensiones de las habitaciones, las coordenadas (X, Y, Z) de los muebles validados por el Octree y el
 historial de recomendaciones esteticas que devuelve la API de OmniRoute.
