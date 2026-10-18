@@ -1,11 +1,22 @@
 # Database — Supabase
 
-This is NOT an application and has no repository of its own. It is one SQL file you run once.
+This is NOT an application. It is the SQL of the database that the FastAPI backend uses on Supabase.
 
 ## Files
-- `schema.sql` — enables the `postgis` and `vector` extensions and creates the tables
-  (`furniture`, `projects`, `spaces`, `placed_items`), their indexes, and turns on Row Level Security.
-- `verify.sql` — queries that confirm the schema was applied correctly.
+Canonical, for the web app:
+- `schema.sql` — **the file to paste into Supabase.** Creates the backend's five tables (`usuarios`,
+  `categorias`, `muebles_catalogo`, `habitaciones`, `muebles_sugeridos`) and their indexes exactly as the
+  SQLAlchemy models define them, turns on Row Level Security and documents every column. Idempotent.
+- `verify.sql` — one read-only query that checks the result; every row must have `ok = true`.
+- `migrations/` — numbered upgrades (and rollbacks) for a database created before `user_id`, `vertices`
+  and RLS existed. See `migrations/README.md`.
+- `tests/` — SQL tests of `schema.sql`, run with `psql`. See `tests/README.md`.
+- `docs/schema_fastapi.md` — entity-relationship diagram of these tables.
+
+Not for the web app:
+- `legacy/node-schema.sql` — the schema of the old Node backend (`furniture`, `projects`, `spaces`,
+  `placed_items`). Obsolete, kept for reference.
+- `scripts/` — an obsolete academic schema, incompatible with the backend. See `scripts/README.md`.
 
 ## Steps
 1. Create a project at https://supabase.com. Choose a region and set a database password — **save it**, you need it in step 4.
