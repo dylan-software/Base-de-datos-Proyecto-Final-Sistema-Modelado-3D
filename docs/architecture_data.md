@@ -1,5 +1,12 @@
 # Arquitectura de persistencia
 
+> **OBSOLETO.** Este documento describe el esquema academico de `scripts/` (base local `modelado_3d`), que
+> el backend FastAPI no usa y que es incompatible con el suyo; ver [`scripts/README.md`](../scripts/README.md).
+> El esquema vigente es `schema.sql`, descrito en [`schema_fastapi.md`](schema_fastapi.md).
+>
+> Donde este documento dice `schema.sql` (con `postgis`, `vector` y las tablas `furniture`, `spaces`, ...) se
+> refiere al esquema del backend Node, que ahora esta en `legacy/node-schema.sql`.
+
 Este documento describe como la base local `modelado_3d` (carpeta `scripts/`) responde a las consultas del
 visor de Three.js: que indices usa, que planes de ejecucion elige PostgreSQL y como diagnosticar problemas
 con las extensiones del esquema de Supabase (`schema.sql`).
