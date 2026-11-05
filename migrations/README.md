@@ -18,6 +18,7 @@ Apply them in number order, one at a time, after backing up the database:
 | `002_add_habitaciones_vertices.sql` | `habitaciones.vertices JSONB` (floor polygon, meters) | yes, at startup |
 | `003_enable_rls.sql` | RLS without policies on the five app tables and any other owned public table | **no** |
 | `004_column_comments.sql` | column comments, including units (catalog in cm, rooms in m) | no |
+| `005_add_project_groups.sql` | `grupos_proyecto` (folders with a description, RLS on) and `habitaciones.grupo_id`, `descripcion`, `derivado_de` (reserved), with their indexes, `ON DELETE SET NULL` links, 1000-character `CHECK`s and comments | yes, at startup, RLS included (comments: no) |
 
 Then run `verify.sql`: every row must have `ok = true`.
 
@@ -27,11 +28,17 @@ part of the schema.
 
 Before deploying the new backend, at least 001 and 002 must be applied (or the backend must start once).
 003 can be applied at any time: the backend connects as the table owner and is not affected by RLS.
+005 is also applied by a backend that has project groups when it starts; running it by hand first is
+harmless. Existing projects keep working: they simply have no group (`grupo_id` NULL).
 
 ## Rollback
 
 `rollback/` undoes the migrations that can be undone. Run rollbacks in reverse order.
 
+- `rollback/005_drop_project_groups.sql` is **destructive**: it deletes every project group and every
+  project description (projects and their furniture stay). As shipped it only counts what would be lost;
+  the `DROP` lines are commented out and have to be enabled by hand after a backup. A backend with project
+  groups re-creates the table and the columns (empty) at its next startup.
 - `rollback/003_disable_rls.sql` turns RLS off on the five app tables. This reopens the Supabase REST API
   on them, including emails and password hashes: use it only to diagnose and re-apply 003 afterwards.
 - `rollback/002_drop_habitaciones_vertices.sql` is **destructive**: it deletes every room's polygon. As
