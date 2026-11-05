@@ -2,17 +2,20 @@
 -- matches the FastAPI backend. Plain SQL, read-only, one single query: the editor shows every check
 -- in one result grid. Every row must have ok = true; detail says what is missing or wrong.
 WITH app_tables(name) AS (
-  VALUES ('usuarios'), ('categorias'), ('muebles_catalogo'), ('habitaciones'), ('muebles_sugeridos')
+  VALUES ('usuarios'), ('categorias'), ('muebles_catalogo'), ('grupos_proyecto'), ('habitaciones'),
+         ('muebles_sugeridos')
 ),
 cols AS (
-  SELECT table_name::text AS t, column_name::text AS c, data_type::text AS type
+  SELECT table_name::text AS t, column_name::text AS c, data_type::text AS type,
+         character_maximum_length::int AS maxlen, is_nullable::text AS nullable,
+         column_default::text AS def
   FROM information_schema.columns
   WHERE table_schema = 'public'
 )
 SELECT n, check_name, ok, detail
 FROM (
-  -- 1. The five tables of the backend exist.
-  SELECT 1 AS n, 'the five tables exist' AS check_name, missing IS NULL AS ok,
+  -- 1. The six tables of the backend exist.
+  SELECT 1 AS n, 'the six tables exist' AS check_name, missing IS NULL AS ok,
          coalesce('missing: ' || missing, 'all present') AS detail
   FROM (
     SELECT string_agg(name, ', ') AS missing FROM app_tables WHERE to_regclass('public.' || name) IS NULL
@@ -42,15 +45,16 @@ FROM (
   FROM cols
   WHERE t = 'habitaciones' AND c = 'vertices'
   UNION ALL
-  -- 5. The six indexes of the models exist; the two unique ones are unique.
-  SELECT 5, 'the six indexes exist', missing IS NULL AND not_unique IS NULL,
+  -- 5. The eight indexes of the models exist; the two unique ones are unique.
+  SELECT 5, 'the eight indexes exist', missing IS NULL AND not_unique IS NULL,
          coalesce(nullif(concat_ws(' ', 'missing: ' || missing, 'not unique: ' || not_unique), ''), 'all present')
   FROM (
     SELECT
       (SELECT string_agg(idx.name, ', ')
        FROM unnest(ARRAY[
          'ix_usuarios_email', 'uq_categorias_nombre_lower', 'ix_muebles_catalogo_categoria_id',
-         'ix_muebles_catalogo_user_id', 'ix_habitaciones_user_id', 'ix_muebles_sugeridos_habitacion_id'
+         'ix_muebles_catalogo_user_id', 'ix_grupos_proyecto_user_id', 'ix_habitaciones_user_id',
+         'ix_habitaciones_grupo_id', 'ix_muebles_sugeridos_habitacion_id'
        ]) AS idx(name)
        WHERE to_regclass('public.' || idx.name) IS NULL) AS missing,
       (SELECT string_agg(idx.name, ', ')
@@ -70,7 +74,7 @@ FROM (
          'habitacion_id -> habitaciones(id) ON DELETE CASCADE'
   UNION ALL
   -- 7. RLS closes the Supabase REST API on every app table, usuarios included.
-  SELECT 7, 'RLS is on for the five tables', missing IS NULL, coalesce('without RLS: ' || missing, 'all five')
+  SELECT 7, 'RLS is on for the six tables', missing IS NULL, coalesce('without RLS: ' || missing, 'all six')
   FROM (
     SELECT string_agg(a.name, ', ') AS missing
     FROM app_tables a
@@ -104,7 +108,7 @@ FROM (
   UNION ALL
   -- 10. The backend connects as the owner, which bypasses RLS, unless RLS is FORCEd on the table.
   SELECT 10, 'the app tables are owned by the current role, RLS not forced',
-         count(*) = 5 AND coalesce(bool_and(owned), false) AND NOT coalesce(bool_or(forced), false),
+         count(*) = 6 AND coalesce(bool_and(owned), false) AND NOT coalesce(bool_or(forced), false),
          coalesce(string_agg(name || ': ' || owner || CASE WHEN forced THEN ' (FORCE RLS)' ELSE '' END,
                              ', ' ORDER BY name), 'no tables')
            || ' (current role: ' || current_user || ')'
@@ -125,5 +129,84 @@ FROM (
     WHERE cols.t IN (SELECT name FROM app_tables) AND cols.c <> 'id'
       AND col_description(att.attrelid, att.attnum) IS NULL
   ) s
+  UNION ALL
+  -- 12. grupos_proyecto (migration 005) has its columns with the right type, length, NULL rule and
+  --     the now() default on creado_en.
+  SELECT 12, 'grupos_proyecto columns and types', missing IS NULL,
+         coalesce('missing or wrong: ' || missing, 'user_id, nombre, descripcion, creado_en')
+  FROM (
+    SELECT string_agg(want.c, ', ') AS missing
+    FROM (VALUES
+      ('user_id', 'character varying', 64, 'NO'),
+      ('nombre', 'character varying', 80, 'NO'),
+      ('descripcion', 'text', NULL, 'YES'),
+      ('creado_en', 'timestamp with time zone', NULL, 'NO')
+    ) AS want(c, type, maxlen, nullable)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM cols
+      WHERE cols.t = 'grupos_proyecto' AND cols.c = want.c AND cols.type = want.type
+        AND cols.maxlen IS NOT DISTINCT FROM want.maxlen AND cols.nullable = want.nullable
+        AND (want.c <> 'creado_en' OR cols.def ILIKE '%now()%')
+    )
+  ) s
+  UNION ALL
+  -- 13. habitaciones has the group, description and (reserved) derived-from columns, all nullable.
+  SELECT 13, 'habitaciones group columns and types', missing IS NULL,
+         coalesce('missing or wrong: ' || missing, 'grupo_id, descripcion, derivado_de')
+  FROM (
+    SELECT string_agg(want.c, ', ') AS missing
+    FROM (VALUES ('grupo_id', 'integer'), ('descripcion', 'text'), ('derivado_de', 'integer')) AS want(c, type)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM cols
+      WHERE cols.t = 'habitaciones' AND cols.c = want.c AND cols.type = want.type AND cols.nullable = 'YES'
+    )
+  ) s
+  UNION ALL
+  -- 14. Deleting a group or a source project never deletes a project: both links become NULL.
+  SELECT 14, 'grupo_id and derivado_de are ON DELETE SET NULL', missing IS NULL,
+         coalesce('missing: ' || missing, 'grupo_id -> grupos_proyecto(id), derivado_de -> habitaciones(id)')
+  FROM (
+    SELECT string_agg(want.col, ', ') AS missing
+    FROM (VALUES ('grupo_id', 'grupos_proyecto'), ('derivado_de', 'habitaciones')) AS want(col, ref)
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM pg_constraint k
+      JOIN pg_attribute a ON a.attrelid = k.conrelid AND a.attnum = k.conkey[1]
+      WHERE k.conrelid = to_regclass('public.habitaciones') AND k.contype = 'f'
+        AND cardinality(k.conkey) = 1 AND a.attname = want.col
+        AND k.confrelid = to_regclass('public.' || want.ref) AND k.confdeltype = 'n'
+    )
+  ) s
+  UNION ALL
+  -- 15. Both descriptions are limited to 1000 characters by a named CHECK.
+  SELECT 15, 'descriptions are limited to 1000 characters', missing IS NULL,
+         coalesce('missing: ' || missing, 'ck_grupos_proyecto_descripcion_len, ck_habitaciones_descripcion_len')
+  FROM (
+    SELECT string_agg(want.name, ', ') AS missing
+    FROM (VALUES
+      ('grupos_proyecto', 'ck_grupos_proyecto_descripcion_len'),
+      ('habitaciones', 'ck_habitaciones_descripcion_len')
+    ) AS want(tbl, name)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM pg_constraint k
+      WHERE k.conrelid = to_regclass('public.' || want.tbl) AND k.contype = 'c' AND k.conname = want.name
+        AND pg_get_constraintdef(k.oid) LIKE '%1000%'
+    )
+  ) s
+  UNION ALL
+  -- 16. Explicitly for the new table: RLS on, not forced and without policies. A table created by the
+  --     backend's create_all does not have RLS until its startup migration (or 005) turns it on.
+  SELECT 16, 'RLS is on for grupos_proyecto, not forced, no policies',
+         coalesce(c.relrowsecurity, false) AND NOT coalesce(c.relforcerowsecurity, false) AND policies = 0,
+         CASE WHEN c.oid IS NULL THEN 'table missing'
+              WHEN NOT c.relrowsecurity THEN 'RLS off: the Supabase REST API can read every group'
+              WHEN c.relforcerowsecurity THEN 'RLS forced: the backend (owner) would be blocked'
+              WHEN policies > 0 THEN policies || ' policies: they reopen the REST API'
+              ELSE 'on, not forced, no policies' END
+  FROM (
+    SELECT to_regclass('public.grupos_proyecto') AS oid,
+           (SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'grupos_proyecto') AS policies
+  ) g
+  LEFT JOIN pg_class c ON c.oid = g.oid
 ) AS checks
 ORDER BY n;
