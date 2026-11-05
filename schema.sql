@@ -8,8 +8,10 @@
 -- again on a database that already has some or all of these objects. Plain SQL only, without psql
 -- meta-commands, so it runs as is in the Supabase SQL Editor.
 --
--- Tables are created in foreign-key order: usuarios, categorias, muebles_catalogo, habitaciones,
--- muebles_sugeridos.
+-- Tables are created in foreign-key order: usuarios, categorias, muebles_catalogo, grupos_proyecto,
+-- habitaciones, muebles_sugeridos. Columns added after a table first existed (user_id, vertices,
+-- grupo_id, descripcion, derivado_de) use ALTER TABLE ... ADD COLUMN IF NOT EXISTS, so the file also
+-- upgrades a database that already has an older version of this schema.
 
 -- Accounts of the web app (POST /api/v1/auth/register). The plain password is never stored.
 CREATE TABLE IF NOT EXISTS usuarios (
@@ -50,6 +52,19 @@ ALTER TABLE muebles_catalogo ADD COLUMN IF NOT EXISTS user_id VARCHAR(64);
 -- Every catalog query filters by the owning account.
 CREATE INDEX IF NOT EXISTS ix_muebles_catalogo_user_id ON muebles_catalogo (user_id);
 
+-- Folders of projects (rooms) of one account, each with a free description (migration 005).
+CREATE TABLE IF NOT EXISTS grupos_proyecto (
+  id           SERIAL PRIMARY KEY,
+  user_id      VARCHAR(64)  NOT NULL,
+  nombre       VARCHAR(80)  NOT NULL,
+  descripcion  TEXT NULL
+               CONSTRAINT ck_grupos_proyecto_descripcion_len CHECK (char_length(descripcion) <= 1000),
+  creado_en    TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+-- Every group query filters by the owning account.
+CREATE INDEX IF NOT EXISTS ix_grupos_proyecto_user_id ON grupos_proyecto (user_id);
+
 -- Rooms. ancho/profundidad are the floor's extent along x/z and alto the ceiling height.
 CREATE TABLE IF NOT EXISTS habitaciones (
   id           SERIAL PRIMARY KEY,
@@ -66,6 +81,21 @@ CREATE INDEX IF NOT EXISTS ix_habitaciones_user_id ON habitaciones (user_id);
 
 -- Irregular, editable floor polygon. NULL for rooms created by /analyze, which are rectangles.
 ALTER TABLE habitaciones ADD COLUMN IF NOT EXISTS vertices JSONB;
+
+-- Group of the project (NULL = "Proyectos sin grupo"), its description and the project it was derived
+-- from (reserved, not used yet). The CHECK and REFERENCES are declared with their column, so they are
+-- skipped together with it when the column already exists: re-running adds nothing twice.
+ALTER TABLE habitaciones ADD COLUMN IF NOT EXISTS grupo_id INTEGER
+  REFERENCES grupos_proyecto (id) ON DELETE SET NULL;
+
+ALTER TABLE habitaciones ADD COLUMN IF NOT EXISTS descripcion TEXT
+  CONSTRAINT ck_habitaciones_descripcion_len CHECK (char_length(descripcion) <= 1000);
+
+ALTER TABLE habitaciones ADD COLUMN IF NOT EXISTS derivado_de INTEGER
+  REFERENCES habitaciones (id) ON DELETE SET NULL;
+
+-- The projects screen lists the projects of each group.
+CREATE INDEX IF NOT EXISTS ix_habitaciones_grupo_id ON habitaciones (grupo_id);
 
 -- Furniture placed in a room (AI proposal or generated layout). Deleting a room deletes its furniture.
 CREATE TABLE IF NOT EXISTS muebles_sugeridos (
@@ -95,6 +125,8 @@ ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categorias ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE muebles_catalogo ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE grupos_proyecto ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE habitaciones ENABLE ROW LEVEL SECURITY;
 
@@ -148,6 +180,12 @@ COMMENT ON COLUMN muebles_catalogo.ancho IS 'Width in CENTIMETERS, as typed in t
 COMMENT ON COLUMN muebles_catalogo.alto IS 'Height in CENTIMETERS.';
 COMMENT ON COLUMN muebles_catalogo.profundidad IS 'Depth in CENTIMETERS.';
 
+COMMENT ON TABLE grupos_proyecto IS 'Folders of projects (rooms) of one account, each with a free description.';
+COMMENT ON COLUMN grupos_proyecto.user_id IS 'Owning account: the session token sub (usuarios.id as text).';
+COMMENT ON COLUMN grupos_proyecto.nombre IS 'Group name, plain text, 1 to 80 characters.';
+COMMENT ON COLUMN grupos_proyecto.descripcion IS 'Free description (place, what was changed...), at most 1000 characters; NULL if none.';
+COMMENT ON COLUMN grupos_proyecto.creado_en IS 'When the group was created.';
+
 COMMENT ON TABLE habitaciones IS 'Rooms. Meters; the 3D y axis points up, the floor is the x/z plane.';
 COMMENT ON COLUMN habitaciones.user_id IS 'Owning account: the session token sub (usuarios.id as text).';
 COMMENT ON COLUMN habitaciones.nombre IS 'Room name.';
@@ -155,6 +193,9 @@ COMMENT ON COLUMN habitaciones.ancho IS 'Extent along x in meters; the bounding 
 COMMENT ON COLUMN habitaciones.alto IS 'Ceiling height in meters (3D y axis).';
 COMMENT ON COLUMN habitaciones.profundidad IS 'Extent along z in meters; the bounding box of vertices when they are set.';
 COMMENT ON COLUMN habitaciones.vertices IS 'Floor polygon as [{"x": m, "y": m}, ...]; the polygon y is the 3D z axis. NULL means the rectangle [0, ancho] x [0, profundidad].';
+COMMENT ON COLUMN habitaciones.grupo_id IS 'Group of the project (grupos_proyecto.id); NULL = no group. Set to NULL if the group is deleted.';
+COMMENT ON COLUMN habitaciones.descripcion IS 'What was done in this project and what changed, at most 1000 characters; NULL if none.';
+COMMENT ON COLUMN habitaciones.derivado_de IS 'RESERVED: project this one was derived from (habitaciones.id); not used yet. Set to NULL if that project is deleted.';
 
 COMMENT ON TABLE muebles_sugeridos IS 'Furniture placed in a room by the AI proposal or the generated layout. Meters.';
 COMMENT ON COLUMN muebles_sugeridos.habitacion_id IS 'Room the piece is placed in (habitaciones.id); deleted with the room.';
