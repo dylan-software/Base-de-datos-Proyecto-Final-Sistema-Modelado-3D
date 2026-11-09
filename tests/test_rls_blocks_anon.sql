@@ -20,6 +20,9 @@ BEGIN
   RETURNING id INTO room_id;
   INSERT INTO muebles_sugeridos (habitacion_id, nombre, ancho, alto, profundidad, posicion_x, posicion_y, posicion_z)
   VALUES (room_id, 'Silla', 0.45, 0.9, 0.5, 1, 0, 1);
+  -- Even a PUBLIC publication stays hidden from the REST API: it is public only through the backend.
+  INSERT INTO publicaciones_proyecto (codigo, user_id, habitacion_id, publica, titulo, documento)
+  VALUES ('EEEEEEEEEEEEEEEE', '1', room_id, true, 'Sala', '{"format": "habita-project"}');
 END
 $$;
 
@@ -38,7 +41,8 @@ BEGIN
 
     EXECUTE format('SET LOCAL ROLE %I', api_role);
 
-    FOREACH app_table IN ARRAY ARRAY['usuarios', 'categorias', 'muebles_catalogo', 'habitaciones', 'muebles_sugeridos'] LOOP
+    FOREACH app_table IN ARRAY ARRAY['usuarios', 'categorias', 'muebles_catalogo', 'habitaciones', 'muebles_sugeridos',
+                                     'publicaciones_proyecto'] LOOP
       -- Reading: either no privilege at all or zero visible rows.
       BEGIN
         EXECUTE format('SELECT count(*) FROM %I', app_table) INTO visible;

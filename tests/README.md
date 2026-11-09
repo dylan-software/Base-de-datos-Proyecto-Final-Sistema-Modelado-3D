@@ -16,7 +16,7 @@ psql -v ON_ERROR_STOP=1 -d proyecto3d_test -f tests/run_all.sql
 Add `-h`, `-p` and `-U` (or set `PGHOST`, `PGPORT`, `PGUSER`) for a server that is not the local default.
 `run_all.sql` includes the other files with `\ir`, so it also works when started from another folder.
 
-It applies `schema.sql` twice (idempotence), then `migrations/001-005` (which must be no-ops on an
+It applies `schema.sql` twice (idempotence), then `migrations/001-006` (which must be no-ops on an
 up-to-date schema), then each test, and finally shows `verify.sql`.
 
 ## Reading the result
@@ -35,7 +35,8 @@ up-to-date schema), then each test, and finally shows `verify.sql`.
 | `test_habitacion_cascade.sql` | deleting a room deletes its placed furniture and only that |
 | `test_habitaciones_vertices_json.sql` | `vertices` returns the stored polygon unchanged; NULL is allowed |
 | `test_project_groups.sql` | deleting a group or a source project keeps the projects (links become NULL); descriptions accept 1000 characters and reject 1001; a group needs `user_id` |
-| `test_rls_blocks_anon.sql` | `anon` and `authenticated` cannot read or write any app table |
+| `test_project_publications.sql` | a new publication is private (`publica` false) with 0 copies; one publication per project and unique codes; public description accepts 1000 characters and rejects 1001; no negative copies; document over 262144 characters rejected; `user_id` required; deleting a project deletes its publication and nothing else |
+| `test_rls_blocks_anon.sql` | `anon` and `authenticated` cannot read or write any app table, not even a public publication |
 
 `test_rls_blocks_anon.sql` only means something on Supabase, where those roles exist. On a plain
 PostgreSQL it prints SKIP. To run it on Supabase, paste the file into the SQL Editor: it rolls back
