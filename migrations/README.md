@@ -19,6 +19,7 @@ Apply them in number order, one at a time, after backing up the database:
 | `003_enable_rls.sql` | RLS without policies on the five app tables and any other owned public table | **no** |
 | `004_column_comments.sql` | column comments, including units (catalog in cm, rooms in m) | no |
 | `005_add_project_groups.sql` | `grupos_proyecto` (folders with a description, RLS on) and `habitaciones.grupo_id`, `descripcion`, `derivado_de` (reserved), with their indexes, `ON DELETE SET NULL` links, 1000-character `CHECK`s and comments | yes, at startup, RLS included (comments: no) |
+| `006_add_project_publications.sql` | `publicaciones_proyecto` (social network: private by default with `publica` false, random public `codigo`, one row per project deleted with it, frozen `habita-project` document of at most 262144 characters, copy counter), its indexes, named `CHECK`s, RLS on and comments | yes, at startup: table, indexes and RLS (comments: no) |
 
 Then run `verify.sql`: every row must have `ok = true`.
 
@@ -30,11 +31,18 @@ Before deploying the new backend, at least 001 and 002 must be applied (or the b
 003 can be applied at any time: the backend connects as the table owner and is not affected by RLS.
 005 is also applied by a backend that has project groups when it starts; running it by hand first is
 harmless. Existing projects keep working: they simply have no group (`grupo_id` NULL).
+006 works the same way: a backend with the social network creates the table, its indexes and its RLS at
+startup. Run the file by hand anyway (before or after that startup): it is the only way to get the column
+comments, which `verify.sql` check 11 requires. No project becomes public: the table starts empty.
 
 ## Rollback
 
 `rollback/` undoes the migrations that can be undone. Run rollbacks in reverse order.
 
+- `rollback/006_drop_project_publications.sql` is **destructive**: it deletes every publication of the
+  social network (projects, their furniture and the copies already made stay: a copy is an ordinary
+  project). As shipped it only counts what would be lost; the `DROP` lines are commented out. A backend
+  with the social network re-creates the table (empty) at its next startup.
 - `rollback/005_drop_project_groups.sql` is **destructive**: it deletes every project group and every
   project description (projects and their furniture stay). As shipped it only counts what would be lost;
   the `DROP` lines are commented out and have to be enabled by hand after a backup. A backend with project
