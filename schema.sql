@@ -9,7 +9,7 @@
 -- meta-commands, so it runs as is in the Supabase SQL Editor.
 --
 -- Tables are created in foreign-key order: usuarios, categorias, muebles_catalogo, grupos_proyecto,
--- habitaciones, muebles_sugeridos. Columns added after a table first existed (user_id, vertices,
+-- habitaciones, muebles_sugeridos, publicaciones_proyecto. Columns added after a table first existed (user_id, vertices,
 -- grupo_id, descripcion, derivado_de) use ALTER TABLE ... ADD COLUMN IF NOT EXISTS, so the file also
 -- upgrades a database that already has an older version of this schema.
 
@@ -112,6 +112,35 @@ CREATE TABLE IF NOT EXISTS muebles_sugeridos (
 
 CREATE INDEX IF NOT EXISTS ix_muebles_sugeridos_habitacion_id ON muebles_sugeridos (habitacion_id);
 
+-- Projects published in the social network (migration 006). Private by default: a project has no row
+-- until its owner publishes it, and publica is false unless set. documento is a frozen copy in the export
+-- format (habita-project v1), without personal data. Deleting a project deletes its publication.
+CREATE TABLE IF NOT EXISTS publicaciones_proyecto (
+  id              SERIAL PRIMARY KEY,
+  codigo          VARCHAR(24)  NOT NULL
+                  CONSTRAINT uq_publicaciones_proyecto_codigo UNIQUE,
+  user_id         VARCHAR(64)  NOT NULL,
+  habitacion_id   INTEGER      NOT NULL
+                  CONSTRAINT uq_publicaciones_proyecto_habitacion_id UNIQUE
+                  REFERENCES habitaciones (id) ON DELETE CASCADE,
+  publica         BOOLEAN      NOT NULL DEFAULT false,
+  titulo          VARCHAR(120) NOT NULL,
+  descripcion     TEXT NULL
+                  CONSTRAINT ck_publicaciones_proyecto_descripcion_len CHECK (char_length(descripcion) <= 1000),
+  documento       JSONB        NOT NULL
+                  CONSTRAINT ck_publicaciones_proyecto_documento_len CHECK (length(documento::text) <= 262144),
+  copias          INTEGER      NOT NULL DEFAULT 0
+                  CONSTRAINT ck_publicaciones_proyecto_copias CHECK (copias >= 0),
+  creada_en       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  actualizada_en  TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+-- The per-account cap counts the publications of one account.
+CREATE INDEX IF NOT EXISTS ix_publicaciones_proyecto_user_id ON publicaciones_proyecto (user_id);
+
+-- The catalog lists the public rows from the newest to the oldest.
+CREATE INDEX IF NOT EXISTS ix_publicaciones_proyecto_catalogo ON publicaciones_proyecto (id DESC) WHERE publica;
+
 -- ---------------------------------------------------------------------------------------------
 -- Row Level Security. Supabase exposes every table in "public" through its auto-generated REST API.
 -- This app never uses that API: only the backend talks to the database, connected as the owner of
@@ -131,6 +160,9 @@ ALTER TABLE grupos_proyecto ENABLE ROW LEVEL SECURITY;
 ALTER TABLE habitaciones ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE muebles_sugeridos ENABLE ROW LEVEL SECURITY;
+
+-- "Public" publications are public only through the backend, never through the REST API.
+ALTER TABLE publicaciones_proyecto ENABLE ROW LEVEL SECURITY;
 
 -- Any other table in "public" that the current role owns, such as the tables of the old Node backend
 -- (furniture, projects, spaces, placed_items) if they were ever created. Tables that belong to an
@@ -206,3 +238,15 @@ COMMENT ON COLUMN muebles_sugeridos.profundidad IS 'Depth along z in meters.';
 COMMENT ON COLUMN muebles_sugeridos.posicion_x IS 'Center of the footprint along x, in meters.';
 COMMENT ON COLUMN muebles_sugeridos.posicion_y IS 'Height of the base above the floor, in meters (0 = on the floor).';
 COMMENT ON COLUMN muebles_sugeridos.posicion_z IS 'Center of the footprint along z, in meters.';
+
+COMMENT ON TABLE publicaciones_proyecto IS 'Projects published in the social network. Private by default: no row, or publica = false, means not listed.';
+COMMENT ON COLUMN publicaciones_proyecto.codigo IS 'Public id of the publication: 16 random URL-safe characters (Python secrets). The only id the API shows.';
+COMMENT ON COLUMN publicaciones_proyecto.user_id IS 'Owning account: the session token sub (usuarios.id as text). Never shown in the API.';
+COMMENT ON COLUMN publicaciones_proyecto.habitacion_id IS 'Published project (habitaciones.id), at most one publication each; deleted with the project. Never shown in the API.';
+COMMENT ON COLUMN publicaciones_proyecto.publica IS 'true = listed in the catalog and copyable. false by default.';
+COMMENT ON COLUMN publicaciones_proyecto.titulo IS 'Title of the publication, plain text, 1 to 120 characters.';
+COMMENT ON COLUMN publicaciones_proyecto.descripcion IS 'Public description written when publishing, at most 1000 characters; NULL if none. Not the private project description.';
+COMMENT ON COLUMN publicaciones_proyecto.documento IS 'Frozen copy of the project in the export format habita-project v1 (meters and cm), without personal data; at most 262144 characters.';
+COMMENT ON COLUMN publicaciones_proyecto.copias IS 'How many times the publication was copied to an account.';
+COMMENT ON COLUMN publicaciones_proyecto.creada_en IS 'When the project was first published.';
+COMMENT ON COLUMN publicaciones_proyecto.actualizada_en IS 'When the frozen copy was last refreshed.';
