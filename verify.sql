@@ -3,7 +3,7 @@
 -- in one result grid. Every row must have ok = true; detail says what is missing or wrong.
 WITH app_tables(name) AS (
   VALUES ('usuarios'), ('categorias'), ('muebles_catalogo'), ('grupos_proyecto'), ('habitaciones'),
-         ('muebles_sugeridos')
+         ('muebles_sugeridos'), ('publicaciones_proyecto')
 ),
 cols AS (
   SELECT table_name::text AS t, column_name::text AS c, data_type::text AS type,
@@ -14,8 +14,8 @@ cols AS (
 )
 SELECT n, check_name, ok, detail
 FROM (
-  -- 1. The six tables of the backend exist.
-  SELECT 1 AS n, 'the six tables exist' AS check_name, missing IS NULL AS ok,
+  -- 1. The seven tables of the backend exist.
+  SELECT 1 AS n, 'the seven tables exist' AS check_name, missing IS NULL AS ok,
          coalesce('missing: ' || missing, 'all present') AS detail
   FROM (
     SELECT string_agg(name, ', ') AS missing FROM app_tables WHERE to_regclass('public.' || name) IS NULL
@@ -45,8 +45,9 @@ FROM (
   FROM cols
   WHERE t = 'habitaciones' AND c = 'vertices'
   UNION ALL
-  -- 5. The eight indexes of the models exist; the two unique ones are unique.
-  SELECT 5, 'the eight indexes exist', missing IS NULL AND not_unique IS NULL,
+  -- 5. The ten indexes of the models exist; the two unique ones are unique (the two UNIQUE constraints
+  --    of publicaciones_proyecto are checked in 18).
+  SELECT 5, 'the ten indexes exist', missing IS NULL AND not_unique IS NULL,
          coalesce(nullif(concat_ws(' ', 'missing: ' || missing, 'not unique: ' || not_unique), ''), 'all present')
   FROM (
     SELECT
@@ -54,7 +55,8 @@ FROM (
        FROM unnest(ARRAY[
          'ix_usuarios_email', 'uq_categorias_nombre_lower', 'ix_muebles_catalogo_categoria_id',
          'ix_muebles_catalogo_user_id', 'ix_grupos_proyecto_user_id', 'ix_habitaciones_user_id',
-         'ix_habitaciones_grupo_id', 'ix_muebles_sugeridos_habitacion_id'
+         'ix_habitaciones_grupo_id', 'ix_muebles_sugeridos_habitacion_id',
+         'ix_publicaciones_proyecto_user_id', 'ix_publicaciones_proyecto_catalogo'
        ]) AS idx(name)
        WHERE to_regclass('public.' || idx.name) IS NULL) AS missing,
       (SELECT string_agg(idx.name, ', ')
@@ -74,7 +76,7 @@ FROM (
          'habitacion_id -> habitaciones(id) ON DELETE CASCADE'
   UNION ALL
   -- 7. RLS closes the Supabase REST API on every app table, usuarios included.
-  SELECT 7, 'RLS is on for the six tables', missing IS NULL, coalesce('without RLS: ' || missing, 'all six')
+  SELECT 7, 'RLS is on for the seven tables', missing IS NULL, coalesce('without RLS: ' || missing, 'all seven')
   FROM (
     SELECT string_agg(a.name, ', ') AS missing
     FROM app_tables a
@@ -108,7 +110,7 @@ FROM (
   UNION ALL
   -- 10. The backend connects as the owner, which bypasses RLS, unless RLS is FORCEd on the table.
   SELECT 10, 'the app tables are owned by the current role, RLS not forced',
-         count(*) = 6 AND coalesce(bool_and(owned), false) AND NOT coalesce(bool_or(forced), false),
+         count(*) = 7 AND coalesce(bool_and(owned), false) AND NOT coalesce(bool_or(forced), false),
          coalesce(string_agg(name || ': ' || owner || CASE WHEN forced THEN ' (FORCE RLS)' ELSE '' END,
                              ', ' ORDER BY name), 'no tables')
            || ' (current role: ' || current_user || ')'
@@ -206,6 +208,91 @@ FROM (
   FROM (
     SELECT to_regclass('public.grupos_proyecto') AS oid,
            (SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'grupos_proyecto') AS policies
+  ) g
+  LEFT JOIN pg_class c ON c.oid = g.oid
+  UNION ALL
+  -- 17. publicaciones_proyecto (migration 006) has its columns with the right type, length and NULL rule;
+  --     publica defaults to false (private by default), copias to 0 and both dates to now().
+  SELECT 17, 'publicaciones_proyecto columns, types and defaults', missing IS NULL,
+         coalesce('missing or wrong: ' || missing, 'publica false by default; 10 columns as expected')
+  FROM (
+    SELECT string_agg(want.c, ', ') AS missing
+    FROM (VALUES
+      ('codigo', 'character varying', 24, 'NO', NULL),
+      ('user_id', 'character varying', 64, 'NO', NULL),
+      ('habitacion_id', 'integer', NULL, 'NO', NULL),
+      ('publica', 'boolean', NULL, 'NO', 'false'),
+      ('titulo', 'character varying', 120, 'NO', NULL),
+      ('descripcion', 'text', NULL, 'YES', NULL),
+      ('documento', 'jsonb', NULL, 'NO', NULL),
+      ('copias', 'integer', NULL, 'NO', '0'),
+      ('creada_en', 'timestamp with time zone', NULL, 'NO', 'now()'),
+      ('actualizada_en', 'timestamp with time zone', NULL, 'NO', 'now()')
+    ) AS want(c, type, maxlen, nullable, def)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM cols
+      WHERE cols.t = 'publicaciones_proyecto' AND cols.c = want.c AND cols.type = want.type
+        AND cols.maxlen IS NOT DISTINCT FROM want.maxlen AND cols.nullable = want.nullable
+        AND (want.def IS NULL OR cols.def ILIKE '%' || want.def || '%')
+    )
+  ) s
+  UNION ALL
+  -- 18. One publication per project, deleted with it, and unique public codes.
+  SELECT 18, 'publications cascade on room delete; codigo and habitacion_id unique',
+         cascade_ok AND missing IS NULL,
+         concat_ws('; ',
+           CASE WHEN cascade_ok THEN 'habitacion_id -> habitaciones(id) ON DELETE CASCADE'
+                ELSE 'habitacion_id is not ON DELETE CASCADE to habitaciones' END,
+           coalesce('missing unique: ' || missing, 'uq_publicaciones_proyecto_codigo, uq_publicaciones_proyecto_habitacion_id'))
+  FROM (
+    SELECT
+      EXISTS (
+        SELECT 1
+        FROM pg_constraint k
+        JOIN pg_attribute a ON a.attrelid = k.conrelid AND a.attnum = k.conkey[1]
+        WHERE k.conrelid = to_regclass('public.publicaciones_proyecto') AND k.contype = 'f'
+          AND cardinality(k.conkey) = 1 AND a.attname = 'habitacion_id'
+          AND k.confrelid = to_regclass('public.habitaciones') AND k.confdeltype = 'c'
+      ) AS cascade_ok,
+      (SELECT string_agg(want.name, ', ')
+       FROM (VALUES ('uq_publicaciones_proyecto_codigo'), ('uq_publicaciones_proyecto_habitacion_id')) AS want(name)
+       WHERE NOT EXISTS (
+         SELECT 1 FROM pg_constraint k
+         WHERE k.conrelid = to_regclass('public.publicaciones_proyecto') AND k.contype = 'u' AND k.conname = want.name
+       )) AS missing
+  ) s
+  UNION ALL
+  -- 19. The three named CHECKs: public description <= 1000 characters, frozen copy <= 262144 characters
+  --     and a copy counter that is never negative.
+  SELECT 19, 'publication CHECKs (description, document size, copies)', missing IS NULL,
+         coalesce('missing: ' || missing,
+                  'ck_publicaciones_proyecto_descripcion_len, ck_publicaciones_proyecto_documento_len, ck_publicaciones_proyecto_copias')
+  FROM (
+    SELECT string_agg(want.name, ', ') AS missing
+    FROM (VALUES
+      ('ck_publicaciones_proyecto_descripcion_len', '%1000%'),
+      ('ck_publicaciones_proyecto_documento_len', '%262144%'),
+      ('ck_publicaciones_proyecto_copias', '%>= 0%')
+    ) AS want(name, def)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM pg_constraint k
+      WHERE k.conrelid = to_regclass('public.publicaciones_proyecto') AND k.contype = 'c' AND k.conname = want.name
+        AND pg_get_constraintdef(k.oid) LIKE want.def
+    )
+  ) s
+  UNION ALL
+  -- 20. Explicitly for the new table: RLS on, not forced and without policies, so the Supabase REST API
+  --     sees nothing (not even the public rows) and the backend (owner) is not affected.
+  SELECT 20, 'RLS is on for publicaciones_proyecto, not forced, no policies',
+         coalesce(c.relrowsecurity, false) AND NOT coalesce(c.relforcerowsecurity, false) AND policies = 0,
+         CASE WHEN c.oid IS NULL THEN 'table missing'
+              WHEN NOT c.relrowsecurity THEN 'RLS off: the Supabase REST API can read every publication and its owner'
+              WHEN c.relforcerowsecurity THEN 'RLS forced: the backend (owner) would be blocked'
+              WHEN policies > 0 THEN policies || ' policies: they reopen the REST API'
+              ELSE 'on, not forced, no policies' END
+  FROM (
+    SELECT to_regclass('public.publicaciones_proyecto') AS oid,
+           (SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'publicaciones_proyecto') AS policies
   ) g
   LEFT JOIN pg_class c ON c.oid = g.oid
 ) AS checks
