@@ -3,7 +3,7 @@
 -- in one result grid. Every row must have ok = true; detail says what is missing or wrong.
 WITH app_tables(name) AS (
   VALUES ('usuarios'), ('categorias'), ('muebles_catalogo'), ('grupos_proyecto'), ('habitaciones'),
-         ('muebles_sugeridos'), ('publicaciones_proyecto')
+         ('muebles_sugeridos'), ('publicaciones_proyecto'), ('perfiles_publicos')
 ),
 cols AS (
   SELECT table_name::text AS t, column_name::text AS c, data_type::text AS type,
@@ -14,8 +14,8 @@ cols AS (
 )
 SELECT n, check_name, ok, detail
 FROM (
-  -- 1. The seven tables of the backend exist.
-  SELECT 1 AS n, 'the seven tables exist' AS check_name, missing IS NULL AS ok,
+  -- 1. The eight tables of the backend exist.
+  SELECT 1 AS n, 'the eight tables exist' AS check_name, missing IS NULL AS ok,
          coalesce('missing: ' || missing, 'all present') AS detail
   FROM (
     SELECT string_agg(name, ', ') AS missing FROM app_tables WHERE to_regclass('public.' || name) IS NULL
@@ -45,9 +45,9 @@ FROM (
   FROM cols
   WHERE t = 'habitaciones' AND c = 'vertices'
   UNION ALL
-  -- 5. The ten indexes of the models exist; the two unique ones are unique (the two UNIQUE constraints
-  --    of publicaciones_proyecto are checked in 18).
-  SELECT 5, 'the ten indexes exist', missing IS NULL AND not_unique IS NULL,
+  -- 5. The eleven indexes of the models exist; the two unique ones are unique (the UNIQUE constraints of
+  --    publicaciones_proyecto are checked in 18 and those of perfiles_publicos in 22).
+  SELECT 5, 'the eleven indexes exist', missing IS NULL AND not_unique IS NULL,
          coalesce(nullif(concat_ws(' ', 'missing: ' || missing, 'not unique: ' || not_unique), ''), 'all present')
   FROM (
     SELECT
@@ -56,7 +56,8 @@ FROM (
          'ix_usuarios_email', 'uq_categorias_nombre_lower', 'ix_muebles_catalogo_categoria_id',
          'ix_muebles_catalogo_user_id', 'ix_grupos_proyecto_user_id', 'ix_habitaciones_user_id',
          'ix_habitaciones_grupo_id', 'ix_muebles_sugeridos_habitacion_id',
-         'ix_publicaciones_proyecto_user_id', 'ix_publicaciones_proyecto_catalogo'
+         'ix_publicaciones_proyecto_user_id', 'ix_publicaciones_proyecto_catalogo',
+         'ix_publicaciones_proyecto_autor'
        ]) AS idx(name)
        WHERE to_regclass('public.' || idx.name) IS NULL) AS missing,
       (SELECT string_agg(idx.name, ', ')
@@ -76,7 +77,7 @@ FROM (
          'habitacion_id -> habitaciones(id) ON DELETE CASCADE'
   UNION ALL
   -- 7. RLS closes the Supabase REST API on every app table, usuarios included.
-  SELECT 7, 'RLS is on for the seven tables', missing IS NULL, coalesce('without RLS: ' || missing, 'all seven')
+  SELECT 7, 'RLS is on for the eight tables', missing IS NULL, coalesce('without RLS: ' || missing, 'all eight')
   FROM (
     SELECT string_agg(a.name, ', ') AS missing
     FROM app_tables a
@@ -110,7 +111,7 @@ FROM (
   UNION ALL
   -- 10. The backend connects as the owner, which bypasses RLS, unless RLS is FORCEd on the table.
   SELECT 10, 'the app tables are owned by the current role, RLS not forced',
-         count(*) = 7 AND coalesce(bool_and(owned), false) AND NOT coalesce(bool_or(forced), false),
+         count(*) = 8 AND coalesce(bool_and(owned), false) AND NOT coalesce(bool_or(forced), false),
          coalesce(string_agg(name || ': ' || owner || CASE WHEN forced THEN ' (FORCE RLS)' ELSE '' END,
                              ', ' ORDER BY name), 'no tables')
            || ' (current role: ' || current_user || ')'
@@ -293,6 +294,60 @@ FROM (
   FROM (
     SELECT to_regclass('public.publicaciones_proyecto') AS oid,
            (SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'publicaciones_proyecto') AS policies
+  ) g
+  LEFT JOIN pg_class c ON c.oid = g.oid
+  UNION ALL
+  -- 21. perfiles_publicos (migration 007) has its columns with the right type, length and NULL rule:
+  --     nombre_visible may be NULL (anonymous) and both dates default to now().
+  SELECT 21, 'perfiles_publicos columns, types and defaults', missing IS NULL,
+         coalesce('missing or wrong: ' || missing, 'nombre_visible nullable; 5 columns as expected')
+  FROM (
+    SELECT string_agg(want.c, ', ') AS missing
+    FROM (VALUES
+      ('user_id', 'character varying', 64, 'NO', NULL),
+      ('codigo', 'character varying', 24, 'NO', NULL),
+      ('nombre_visible', 'character varying', 40, 'YES', NULL),
+      ('creado_en', 'timestamp with time zone', NULL, 'NO', 'now()'),
+      ('actualizado_en', 'timestamp with time zone', NULL, 'NO', 'now()')
+    ) AS want(c, type, maxlen, nullable, def)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM cols
+      WHERE cols.t = 'perfiles_publicos' AND cols.c = want.c AND cols.type = want.type
+        AND cols.maxlen IS NOT DISTINCT FROM want.maxlen AND cols.nullable = want.nullable
+        AND (want.def IS NULL OR cols.def ILIKE '%' || want.def || '%')
+    )
+  ) s
+  UNION ALL
+  -- 22. One profile per account, unique public codes, and a visible name of 1 to 40 characters.
+  SELECT 22, 'perfiles_publicos user_id and codigo unique; name CHECK', missing IS NULL,
+         coalesce('missing: ' || missing,
+                  'uq_perfiles_publicos_user_id, uq_perfiles_publicos_codigo, ck_perfiles_publicos_nombre_visible_len')
+  FROM (
+    SELECT string_agg(want.name, ', ') AS missing
+    FROM (VALUES
+      ('uq_perfiles_publicos_user_id', 'u', '%'),
+      ('uq_perfiles_publicos_codigo', 'u', '%'),
+      ('ck_perfiles_publicos_nombre_visible_len', 'c', '%40%')
+    ) AS want(name, kind, def)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM pg_constraint k
+      WHERE k.conrelid = to_regclass('public.perfiles_publicos') AND k.contype::text = want.kind
+        AND k.conname = want.name AND pg_get_constraintdef(k.oid) LIKE want.def
+    )
+  ) s
+  UNION ALL
+  -- 23. Explicitly for the new table: RLS on, not forced and without policies. A profile links every
+  --     publication of one account, so it must not be readable through the Supabase REST API.
+  SELECT 23, 'RLS is on for perfiles_publicos, not forced, no policies',
+         coalesce(c.relrowsecurity, false) AND NOT coalesce(c.relforcerowsecurity, false) AND policies = 0,
+         CASE WHEN c.oid IS NULL THEN 'table missing'
+              WHEN NOT c.relrowsecurity THEN 'RLS off: the Supabase REST API can link every profile to its account'
+              WHEN c.relforcerowsecurity THEN 'RLS forced: the backend (owner) would be blocked'
+              WHEN policies > 0 THEN policies || ' policies: they reopen the REST API'
+              ELSE 'on, not forced, no policies' END
+  FROM (
+    SELECT to_regclass('public.perfiles_publicos') AS oid,
+           (SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'perfiles_publicos') AS policies
   ) g
   LEFT JOIN pg_class c ON c.oid = g.oid
 ) AS checks

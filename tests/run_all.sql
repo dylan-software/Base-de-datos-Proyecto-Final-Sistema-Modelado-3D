@@ -1,7 +1,7 @@
 -- Runs every test in this folder against an EMPTY database. psql only (uses \ir); see tests/README.md.
 --
 -- 1. Applies schema.sql twice: the second run must not fail, which proves it is idempotent.
--- 2. Applies migrations/001-006 on top: on an up-to-date schema they must be no-ops.
+-- 2. Applies migrations/001-007 on top: on an up-to-date schema they must be no-ops.
 -- 3. Runs each test. Each one works inside BEGIN ... ROLLBACK, so the database stays empty, and prints
 --    PASS (or SKIP) as a NOTICE. A failure raises "FAIL: <test>: <reason>" and, with ON_ERROR_STOP,
 --    stops the run with a non-zero exit code.
@@ -21,6 +21,7 @@ SET client_min_messages = notice;
 \ir ../migrations/004_column_comments.sql
 \ir ../migrations/005_add_project_groups.sql
 \ir ../migrations/006_add_project_publications.sql
+\ir ../migrations/007_add_public_profiles.sql
 
 \echo '== tests'
 \ir test_usuarios_email_unique.sql
@@ -30,6 +31,7 @@ SET client_min_messages = notice;
 \ir test_habitaciones_vertices_json.sql
 \ir test_project_groups.sql
 \ir test_project_publications.sql
+\ir test_public_profiles.sql
 \ir test_rls_blocks_anon.sql
 
 \echo '== verify.sql (every row must have ok = t)'

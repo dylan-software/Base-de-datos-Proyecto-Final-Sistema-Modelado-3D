@@ -23,6 +23,8 @@ BEGIN
   -- Even a PUBLIC publication stays hidden from the REST API: it is public only through the backend.
   INSERT INTO publicaciones_proyecto (codigo, user_id, habitacion_id, publica, titulo, documento)
   VALUES ('EEEEEEEEEEEEEEEE', '1', room_id, true, 'Sala', '{"format": "habita-project"}');
+  -- A profile links the publications of one account: hidden from the REST API as well.
+  INSERT INTO perfiles_publicos (user_id, codigo, nombre_visible) VALUES ('1', 'FFFFFFFFFFFFFFFF', 'Ana');
 END
 $$;
 
@@ -42,7 +44,7 @@ BEGIN
     EXECUTE format('SET LOCAL ROLE %I', api_role);
 
     FOREACH app_table IN ARRAY ARRAY['usuarios', 'categorias', 'muebles_catalogo', 'habitaciones', 'muebles_sugeridos',
-                                     'publicaciones_proyecto'] LOOP
+                                     'publicaciones_proyecto', 'perfiles_publicos'] LOOP
       -- Reading: either no privilege at all or zero visible rows.
       BEGIN
         EXECUTE format('SELECT count(*) FROM %I', app_table) INTO visible;

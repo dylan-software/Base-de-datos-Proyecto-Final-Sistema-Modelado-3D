@@ -141,6 +141,35 @@ CREATE INDEX IF NOT EXISTS ix_publicaciones_proyecto_user_id ON publicaciones_pr
 -- The catalog lists the public rows from the newest to the oldest.
 CREATE INDEX IF NOT EXISTS ix_publicaciones_proyecto_catalogo ON publicaciones_proyecto (id DESC) WHERE publica;
 
+-- The catalog shows one card per author (their newest public publication) and the profile page lists the
+-- public publications of one author, newest first (migration 007).
+CREATE INDEX IF NOT EXISTS ix_publicaciones_proyecto_autor
+  ON publicaciones_proyecto (user_id, id DESC) WHERE publica;
+
+-- Public profiles of the social network (migration 007): at most one per account. codigo is the only id
+-- the API shows; nombre_visible is typed by the owner when publishing (NULL = anonymous) and is never
+-- copied from usuarios.nombre.
+CREATE TABLE IF NOT EXISTS perfiles_publicos (
+  id              SERIAL PRIMARY KEY,
+  user_id         VARCHAR(64)  NOT NULL
+                  CONSTRAINT uq_perfiles_publicos_user_id UNIQUE,
+  codigo          VARCHAR(24)  NOT NULL
+                  CONSTRAINT uq_perfiles_publicos_codigo UNIQUE,
+  nombre_visible  VARCHAR(40)  NULL
+                  CONSTRAINT ck_perfiles_publicos_nombre_visible_len
+                  CHECK (char_length(nombre_visible) BETWEEN 1 AND 40),
+  creado_en       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  actualizado_en  TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+-- One anonymous profile for every account that already published something and has no profile yet
+-- (a no-op on an empty database and on a second run).
+INSERT INTO perfiles_publicos (user_id, codigo)
+SELECT authors.user_id, left(replace(gen_random_uuid()::text, '-', ''), 16)
+FROM (SELECT DISTINCT user_id FROM publicaciones_proyecto) AS authors
+WHERE NOT EXISTS (SELECT 1 FROM perfiles_publicos p WHERE p.user_id = authors.user_id)
+ON CONFLICT DO NOTHING;
+
 -- ---------------------------------------------------------------------------------------------
 -- Row Level Security. Supabase exposes every table in "public" through its auto-generated REST API.
 -- This app never uses that API: only the backend talks to the database, connected as the owner of
@@ -163,6 +192,9 @@ ALTER TABLE muebles_sugeridos ENABLE ROW LEVEL SECURITY;
 
 -- "Public" publications are public only through the backend, never through the REST API.
 ALTER TABLE publicaciones_proyecto ENABLE ROW LEVEL SECURITY;
+
+-- Profiles link publications of the same account: public only through the backend, never the REST API.
+ALTER TABLE perfiles_publicos ENABLE ROW LEVEL SECURITY;
 
 -- Any other table in "public" that the current role owns, such as the tables of the old Node backend
 -- (furniture, projects, spaces, placed_items) if they were ever created. Tables that belong to an
@@ -250,3 +282,10 @@ COMMENT ON COLUMN publicaciones_proyecto.documento IS 'Frozen copy of the projec
 COMMENT ON COLUMN publicaciones_proyecto.copias IS 'How many times the publication was copied to an account.';
 COMMENT ON COLUMN publicaciones_proyecto.creada_en IS 'When the project was first published.';
 COMMENT ON COLUMN publicaciones_proyecto.actualizada_en IS 'When the frozen copy was last refreshed.';
+
+COMMENT ON TABLE perfiles_publicos IS 'Public profiles of the social network: one per account, created when it first publishes. Shows no email, account id or registration name.';
+COMMENT ON COLUMN perfiles_publicos.user_id IS 'Owning account: the session token sub (usuarios.id as text). One profile per account. Never shown in the API.';
+COMMENT ON COLUMN perfiles_publicos.codigo IS 'Public id of the profile: 16 random characters (Python secrets, or hex from gen_random_uuid in migration 007). Never changes.';
+COMMENT ON COLUMN perfiles_publicos.nombre_visible IS 'Name shown in the social network, typed by the owner when publishing, 1 to 40 characters; NULL = anonymous. Never copied from usuarios.nombre.';
+COMMENT ON COLUMN perfiles_publicos.creado_en IS 'When the profile was created.';
+COMMENT ON COLUMN perfiles_publicos.actualizado_en IS 'When the visible name last changed.';
